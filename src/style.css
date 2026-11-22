@@ -155,8 +155,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .timeline-content { min-width: 0; padding: 8px 0 10px 12px; }
 .timeline-schedule { position: relative; height: 166px; margin: 3px 0 9px; border-top: 1px solid #eceee9; border-bottom: 1px solid #eceee9; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(25% - 1px), #eceee9 calc(25% - 1px), #eceee9 25%); }
 .timeline-schedule::before { position: absolute; top: 0; bottom: 0; left: 0; width: 1px; background: #e8ebe6; content: ''; }
-.current-time-indicator { position: absolute; z-index: 3; right: 0; left: 0; height: 0; border-top: 2px solid #d56f65; pointer-events: none; }
-.current-time-indicator::before { position: absolute; top: -5px; left: -3px; width: 8px; height: 8px; border: 2px solid #fff; border-radius: 50%; background: #d56f65; box-shadow: 0 0 0 1px #d56f65; content: ''; }
+.current-time-indicator { position: absolute; z-index: 3; right: 0; left: 0; height: 0; border-top: 2px solid #d56f6580; pointer-events: none; }
+/* .current-time-indicator::before { position: absolute; top: -5px; left: -3px; width: 8px; height: 8px; border: 2px solid #fff; border-radius: 50%; background: #d56f65; box-shadow: 0 0 0 1px #d56f65; content: ''; } */
 .current-time-indicator > span { position: absolute; top: -10px; right: 4px; padding: 2px 4px; border-radius: 3px; background: #d56f65; color: #fff; font-size: 7px; font-weight: 700; line-height: 1; }
 .timeline-event { position: absolute; top: var(--event-start); left: calc(var(--event-lane) * 100% / var(--event-lanes) + 3px); display: flex; width: calc(100% / var(--event-lanes) - 7px); min-width: 0; height: max(52px, var(--event-duration)); flex-direction: column; align-items: flex-start; overflow: hidden; padding: 5px 7px; border: 1px solid color-mix(in srgb, var(--event-color) 25%, white); border-left: 3px solid var(--event-color); border-radius: 4px; background: color-mix(in srgb, var(--event-color) 8%, white); color: #536057; text-align: left; box-shadow: 0 2px 5px #273c2c06; transition: box-shadow .15s; }
 .timeline-event:hover { z-index: 1; box-shadow: 0 4px 11px #273c2c18; }
