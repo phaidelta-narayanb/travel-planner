@@ -321,7 +321,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .ai-destination-field .optional { color: #97a396; }
 .ai-destination-field .ai-destination-input { padding: 12px; border-color: #cdd9ce; background: #fff; color: #45554a; font-size: 13px; }
 .ai-form-actions { margin-top: 4px; }
-.ai-loading { display: grid; gap: 9px; margin-bottom: 15px; color: #66746a; font-size: 11px; }
+.ai-loading { display: grid; gap: 9px; margin-top: 15px; color: #66746a; font-size: 11px; }
 .ai-loading strong { font-size: 11px; font-weight: 600; }
 .ai-loading small { color: #969e98; font-size: 10px; }
 .ai-progress { height: 4px; overflow: hidden; border-radius: 5px; background: #edf0ea; }

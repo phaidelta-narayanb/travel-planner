@@ -791,6 +791,11 @@ function AIPlannerDialog({ mode, account, trip, events, onClose, onUseDestinatio
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showResults, setShowResults] = useState(false)
+  const loadingRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (loading) loadingRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [loading])
 
   const requestAI = async <T,>(path: string, payload: unknown): Promise<T> => {
     const response = await fetch(`${API_URL}/api/ai/${path}`, {
@@ -902,7 +907,6 @@ function AIPlannerDialog({ mode, account, trip, events, onClose, onUseDestinatio
   const closeToForm = () => { setShowResults(false); setError('') }
 
   return <DialogFrame title={title} subtitle={subtitle} onClose={onClose} className="ai-planner-dialog">
-    {loading && <div className="ai-loading" role="status" aria-live="polite"><div className="ai-progress"><span /></div><strong>{isDestinationMode ? 'Considering the season and your preferences…' : 'Reviewing your itinerary and drafting ideas…'}</strong><small>This may take a little while. Your plans won’t change unless you apply suggestions.</small></div>}
     {error && <div className="form-error ai-error" role="alert">{error}</div>}
 
     {isDestinationMode && !showResults && <form className="dialog-form ai-form" onSubmit={submitDestinationPreferences}>
@@ -957,6 +961,7 @@ function AIPlannerDialog({ mode, account, trip, events, onClose, onUseDestinatio
         <div className="dialog-actions"><button className="secondary-button" onClick={closeToForm}>Adjust request</button><span /><button className="primary-button" onClick={onClose}>Done</button></div>
       </>}
     </div>}
+    {loading && <div ref={loadingRef} className="ai-loading" role="status" aria-live="polite"><div className="ai-progress"><span /></div><strong>{isDestinationMode ? 'Considering the season and your preferences…' : 'Reviewing your itinerary and drafting ideas…'}</strong><small>This may take a little while. Your plans won’t change unless you apply suggestions.</small></div>}
   </DialogFrame>
 }
 
