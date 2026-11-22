@@ -130,7 +130,7 @@ function App() {
   const route = useMemo(() => resolveRoute(location.pathname), [location.pathname])
   const { view, tripId: activeTripId } = route
   const [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState<string[] | null>(null)
   const [timelineFocus, setTimelineFocus] = useState<TimelineFocusRequest | null>(null)
   const timelineFocusId = useRef(0)
   const [eventModal, setEventModal] = useState<PlanEvent | 'new' | null>(null)
@@ -162,7 +162,7 @@ function App() {
     else localStorage.removeItem(ACCOUNT_KEY)
   }, [account])
   useEffect(() => { if (!notice) return; const timer = window.setTimeout(() => setNotice(''), 3500); return () => window.clearTimeout(timer) }, [notice])
-  useEffect(() => { if (activeTripId) setFilter(activeTripId) }, [activeTripId])
+  useEffect(() => { if (activeTripId) setFilter([activeTripId]) }, [activeTripId])
   useEffect(() => {
     if (view !== 'trips' || settings.examplePlansPrompted) return
     setSettings((current) => ({ ...current, examplePlansPrompted: true }))
@@ -239,20 +239,13 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [data, autoSync, account, pendingRemote, syncData])
 
-  const visibleEvents = useMemo(() => data.events.filter((event) => filter === 'all' || event.tripId === filter), [data.events, filter])
-  const filteredTrips = useMemo(() => filter === 'all' ? data.trips : data.trips.filter((trip) => trip.id === filter), [data.trips, filter])
+  const visibleEvents = useMemo(() => data.events.filter((event) => filter === null || filter.includes(event.tripId)), [data.events, filter])
+  const filteredTrips = useMemo(() => filter === null ? data.trips : data.trips.filter((trip) => filter.includes(trip.id)), [data.trips, filter])
   const activeTrips = data.trips.filter((trip) => trip.endDate >= dateOnly(today)).length
   const activeTrip = data.trips.find((trip) => trip.id === activeTripId)
-  const selectedTrip = data.trips.find((trip) => trip.id === (activeTripId ?? filter))
+  const selectedTrip = data.trips.find((trip) => trip.id === (activeTripId ?? (filter?.length === 1 ? filter[0] : undefined)))
 
-  const selectTripFilter = (tripId: string | 'all') => {
-    if (filter === tripId) return
-    setFilter(tripId)
-    if (tripId === 'all') {
-      setTimelineFocus(null)
-      return
-    }
-
+  const focusTrip = (tripId: string) => {
     const trip = data.trips.find((item) => item.id === tripId)
     if (!trip) return
     const currentDate = dateOnly(new Date())
@@ -273,6 +266,29 @@ function App() {
       if (view !== 'timeline') navigate('/timeline')
     }
   }
+
+  const selectTripFilter = (tripId: string | 'all') => {
+    if (tripId === 'all') {
+      if (filter === null) return
+      setFilter(null)
+      setTimelineFocus(null)
+      return
+    }
+    if (filter?.length === 1 && filter[0] === tripId) return
+    setFilter([tripId])
+    focusTrip(tripId)
+  }
+
+  const toggleTripFilter = (tripId: string) => {
+    const nextIds = filter === null
+      ? data.trips.filter((trip) => trip.id !== tripId).map((trip) => trip.id)
+      : filter.includes(tripId)
+        ? filter.filter((id) => id !== tripId)
+        : [...filter, tripId]
+    const nextFilter = nextIds.length === data.trips.length ? null : nextIds
+    setFilter(nextFilter)
+    if (nextFilter?.includes(tripId)) focusTrip(tripId)
+  }
   const clearTimelineFocus = (id: number) => {
     setTimelineFocus((current) => current?.id === id ? null : current)
   }
@@ -282,12 +298,12 @@ function App() {
   const saveTrip = (trip: Trip) => setData((current) => ({ ...current, trips: [...current.trips.filter((item) => item.id !== trip.id), trip].sort((a, b) => a.startDate.localeCompare(b.startDate)) }))
   const deleteTrip = (id: string) => {
     setData((current) => ({ trips: current.trips.filter((trip) => trip.id !== id), events: current.events.filter((event) => event.tripId !== id) }))
-    if (filter === id) setFilter('all')
+    if (filter?.includes(id)) setFilter(filter.filter((tripId) => tripId !== id))
     if (activeTripId === id) navigate('/trips')
     setTripModal(null)
   }
   const openTripPlan = (tripId: string, destination: 'plan' | 'itinerary' = 'plan') => {
-    setFilter(tripId)
+    setFilter([tripId])
     navigate(`/trips/${encodeURIComponent(tripId)}${destination === 'itinerary' ? '/itinerary' : ''}`, { replace: Boolean(eventModal) })
     setEventModal(null)
   }
@@ -395,8 +411,8 @@ function App() {
         {view !== 'trips' && <>
           <div className="trip-list-head"><span className="side-label">Your trips</span><button aria-label="Create trip" className="tiny-add" onClick={() => setTripModal('new')}><Icon name="plus" size={16} /></button></div>
           <div className="side-trips">
-            <button className={`side-trip ${filter === 'all' ? 'selected' : ''}`} onClick={() => selectTripFilter('all')}><span className="trip-dot all-dot" /><span>All trips</span><span className="side-trip-count">{data.trips.length}</span></button>
-            {data.trips.map((trip) => <button key={trip.id} className={`side-trip ${filter === trip.id ? 'selected' : ''}`} onClick={() => selectTripFilter(trip.id)}><span className="trip-dot" style={{ backgroundColor: trip.color }} /><span className="side-trip-name">{trip.name}</span></button>)}
+            <button className={`side-trip ${filter === null ? 'selected' : ''}`} onClick={() => selectTripFilter('all')}><span className="trip-dot all-dot" /><span>All trips</span><span className="side-trip-count">{data.trips.length}</span></button>
+            {data.trips.map((trip) => <button key={trip.id} className={`side-trip ${filter?.includes(trip.id) ? 'selected' : ''}`} onClick={() => selectTripFilter(trip.id)}><span className="trip-dot" style={{ backgroundColor: trip.color }} /><span className="side-trip-name">{trip.name}</span></button>)}
           </div>
         </>}
         <div className="sidebar-bottom">
@@ -414,6 +430,7 @@ function App() {
         </header>
 
         <div className="page-content">
+          {(view === 'calendar' || view === 'timeline') && <MobileTripFilter trips={data.trips} selectedTripIds={filter} onSelectAll={() => selectTripFilter('all')} onToggleTrip={toggleTripFilter} />}
           {view === 'calendar' && <CalendarView month={month} setMonth={setMonth} events={visibleEvents} trips={data.trips} onNew={() => setEventModal('new')} onEdit={setEventModal} />}
           {view === 'timeline' && <TimelineView events={visibleEvents} trips={data.trips} focusRequest={timelineFocus} onFocusHandled={clearTimelineFocus} onNew={() => setEventModal('new')} onEdit={setEventModal} />}
           {view === 'trips' && <TripsView trips={data.trips} events={data.events} onNew={() => setTripModal('new')} onEdit={(trip) => navigate(`/trips/${encodeURIComponent(trip.id)}/edit`)} onNewEvent={() => setEventModal('new')} onOpenPlan={(tripId) => openTripPlan(tripId)} />}
@@ -433,6 +450,33 @@ function App() {
       {notice && <div className="toast" role="status">{notice}</div>}
     </div>
   )
+}
+
+function MobileTripFilter({ trips, selectedTripIds, onSelectAll, onToggleTrip }: {
+  trips: Trip[]
+  selectedTripIds: string[] | null
+  onSelectAll: () => void
+  onToggleTrip: (tripId: string) => void
+}) {
+  const label = selectedTripIds === null
+    ? 'All trips'
+    : selectedTripIds.length === 0
+      ? 'No trips'
+      : selectedTripIds.length === 1
+        ? trips.find((trip) => trip.id === selectedTripIds[0])?.name ?? '1 trip'
+        : `${selectedTripIds.length} trips`
+
+  return <details className="mobile-trip-filter">
+    <summary><Icon name="grid" size={15} /><span>Filter trips</span><strong>{label}</strong><Icon name="chevron" size={14} /></summary>
+    <div className="mobile-trip-filter-menu" role="group" aria-label="Filter by trip">
+      <label className="mobile-trip-filter-option"><input type="checkbox" checked={selectedTripIds === null} onChange={onSelectAll} /><span>All trips</span></label>
+      {trips.map((trip) => <label className="mobile-trip-filter-option" key={trip.id}>
+        <input type="checkbox" checked={selectedTripIds === null || selectedTripIds.includes(trip.id)} onChange={() => onToggleTrip(trip.id)} />
+        <i className="trip-dot" style={{ backgroundColor: trip.color }} />
+        <span>{trip.name}</span>
+      </label>)}
+    </div>
+  </details>
 }
 
 function CalendarView({ month, setMonth, events, trips, onNew, onEdit }: { month: Date; setMonth: (date: Date) => void; events: PlanEvent[]; trips: Trip[]; onNew: () => void; onEdit: (event: PlanEvent) => void }) {

@@ -68,6 +68,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .breadcrumbs strong { color: #4c5651; font-weight: 600; }
 .mobile-app-name, .mobile-title-separator { display: none; }
 .top-actions { gap: 14px; }
+.mobile-trip-filter { display: none; }
 .icon-button { position: relative; display: grid; width: 31px; height: 31px; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #7e8782; }
 .icon-button:hover { background: #f4f4f0; }
 .notification-button > span { position: absolute; top: 5px; right: 6px; width: 5px; height: 5px; border: 1px solid white; border-radius: 50%; background: #cc9671; }
@@ -342,6 +343,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .sync-button { height: 30px; padding: 0 9px; font-size: 10px; }
   .top-avatar { width: 28px; height: 28px; min-width: 28px; }
   .page-content { padding: 27px 15px 20px; }
+  .mobile-trip-filter { position: relative; z-index: 2; display: block; margin: -8px 0 19px; }
+  .mobile-trip-filter > summary { display: flex; min-height: 36px; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid #e6e8e2; border-radius: 5px; background: #fff; color: #78827b; list-style: none; font-size: 10px; cursor: pointer; }
+  .mobile-trip-filter > summary::-webkit-details-marker { display: none; }
+  .mobile-trip-filter > summary strong { overflow: hidden; min-width: 0; margin-left: auto; color: #53665a; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 600; }
+  .mobile-trip-filter[open] > summary { border-color: #9caf9f; border-bottom-right-radius: 0; border-bottom-left-radius: 0; }
+  .mobile-trip-filter-menu { position: absolute; top: calc(100% + 1px); right: 0; left: 0; overflow-y: auto; max-height: min(45vh, 300px); padding: 5px; border: 1px solid #9caf9f; border-top: 0; border-radius: 0 0 5px 5px; background: #fff; box-shadow: 0 8px 20px #33453717; }
+  .mobile-trip-filter-option { display: flex; min-height: 36px; align-items: center; gap: 9px; padding: 0 7px; border-radius: 4px; color: #66736b; font-size: 10px; cursor: pointer; }
+  .mobile-trip-filter-option:hover { background: #f6f7f3; }
+  .mobile-trip-filter-option input { width: 14px; height: 14px; flex: 0 0 14px; margin: 0; accent-color: #688572; }
+  .mobile-trip-filter-option .trip-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .mobile-trip-filter-option span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .page-heading { align-items: flex-start; gap: 12px; margin-bottom: 28px; }
   .page-heading h1 { font-size: 28px; letter-spacing: -1px; }
   .page-heading p { max-width: 255px; font-size: 10px; line-height: 1.5; }
