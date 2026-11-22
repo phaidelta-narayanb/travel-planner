@@ -5,6 +5,7 @@ import type { PlanEvent, PlannerData, Trip } from './types'
 
 type View = 'calendar' | 'timeline' | 'trips' | 'plan' | 'itinerary' | 'trip-edit' | 'not-found'
 type AppRoute = { view: View; tripId?: string }
+type TimelineFocusRequest = { date: string; id: number }
 type Account = { email: string; token: string }
 const DATA_KEY = 'waypoint-planner-data'
 const ACCOUNT_KEY = 'waypoint-account'
@@ -29,7 +30,8 @@ const seedData: PlannerData = {
   ],
   events: [
     { id: 'e1', tripId: 'kyoto', title: 'Flight to Osaka', type: 'flight', start: `${dateOnly(shiftDate(today, 3))}T09:30`, end: `${dateOnly(shiftDate(today, 3))}T15:40`, location: 'Kansai International Airport' },
-    { id: 'e2', tripId: 'kyoto', title: 'Check in · The Junei Hotel', type: 'stay', start: `${dateOnly(shiftDate(today, 3))}T17:00`, end: `${dateOnly(shiftDate(today, 6))}T11:00`, location: 'Higashiyama, Kyoto' },
+    { id: 'e9', tripId: 'kyoto', title: 'Haruka Express to Kyoto', type: 'flight', start: `${dateOnly(shiftDate(today, 3))}T16:15`, end: `${dateOnly(shiftDate(today, 3))}T17:40`, location: 'Kansai International Airport · Kyoto Station' },
+    { id: 'e2', tripId: 'kyoto', title: 'Stay at The Junei Hotel', type: 'stay', start: `${dateOnly(shiftDate(today, 3))}T18:30`, end: `${dateOnly(shiftDate(today, 6))}T11:00`, location: 'Higashiyama, Kyoto' },
     { id: 'e3', tripId: 'kyoto', title: "Walk the Philosopher's Path", type: 'activity', start: `${dateOnly(shiftDate(today, 4))}T08:30`, end: `${dateOnly(shiftDate(today, 4))}T11:00`, location: 'Sakyo Ward' },
     { id: 'e4', tripId: 'kyoto', title: 'Book dinner at Gion Tanto', type: 'task', start: `${dateOnly(shiftDate(today, 4))}T16:00` },
     { id: 'e5', tripId: 'kyoto', title: 'Tea ceremony', type: 'activity', start: `${dateOnly(shiftDate(today, 5))}T14:00`, end: `${dateOnly(shiftDate(today, 5))}T15:30`, location: 'Camellia Garden' },
@@ -106,6 +108,8 @@ function App() {
   const { view, tripId: activeTripId } = route
   const [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
   const [filter, setFilter] = useState('all')
+  const [timelineFocus, setTimelineFocus] = useState<TimelineFocusRequest | null>(null)
+  const timelineFocusId = useRef(0)
   const [eventModal, setEventModal] = useState<PlanEvent | 'new' | null>(null)
   const [tripModal, setTripModal] = useState<Trip | 'new' | null>(null)
   const [accountOpen, setAccountOpen] = useState(false)
@@ -204,6 +208,38 @@ function App() {
   const activeTrips = data.trips.filter((trip) => trip.endDate >= dateOnly(today)).length
   const activeTrip = data.trips.find((trip) => trip.id === activeTripId)
   const selectedTrip = data.trips.find((trip) => trip.id === (activeTripId ?? filter))
+
+  const selectTripFilter = (tripId: string | 'all') => {
+    if (filter === tripId) return
+    setFilter(tripId)
+    if (tripId === 'all') {
+      setTimelineFocus(null)
+      return
+    }
+
+    const trip = data.trips.find((item) => item.id === tripId)
+    if (!trip) return
+    const currentDate = dateOnly(new Date())
+    const tripEvents = data.events
+      .filter((event) => event.tripId === tripId)
+      .sort((a, b) => a.start.localeCompare(b.start))
+    const focusDate = currentDate >= trip.startDate && currentDate <= trip.endDate
+      ? currentDate
+      : currentDate < trip.startDate
+        ? (tripEvents.length ? eventDay(tripEvents[0]) : trip.startDate)
+        : (tripEvents.at(-1)?.end?.slice(0, 10) ?? tripEvents.at(-1)?.start.slice(0, 10) ?? trip.endDate)
+
+    if (view === 'calendar') {
+      setMonth(new Date(`${focusDate}T12:00:00`))
+      setTimelineFocus(null)
+    } else {
+      setTimelineFocus({ date: focusDate, id: ++timelineFocusId.current })
+      if (view !== 'timeline') navigate('/timeline')
+    }
+  }
+  const clearTimelineFocus = (id: number) => {
+    setTimelineFocus((current) => current?.id === id ? null : current)
+  }
 
   const saveEvent = (event: PlanEvent) => setData((current) => ({ ...current, events: [...current.events.filter((item) => item.id !== event.id), event].sort((a, b) => a.start.localeCompare(b.start)) }))
   const deleteEvent = (id: string) => { setData((current) => ({ ...current, events: current.events.filter((event) => event.id !== id) })); setEventModal(null) }
@@ -308,11 +344,13 @@ function App() {
           <Link className={view === 'timeline' ? 'nav-item active' : 'nav-item'} to="/timeline"><Icon name="clock" />Timeline</Link>
           <Link className={view === 'trips' || view === 'plan' || view === 'itinerary' || view === 'trip-edit' ? 'nav-item active' : 'nav-item'} to="/trips"><Icon name="grid" />My trips<span className="nav-count">{data.trips.length}</span></Link>
         </nav>
-        <div className="trip-list-head"><span className="side-label">Your trips</span><button aria-label="Create trip" className="tiny-add" onClick={() => setTripModal('new')}><Icon name="plus" size={16} /></button></div>
-        <div className="side-trips">
-          <button className={`side-trip ${filter === 'all' ? 'selected' : ''}`} onClick={() => setFilter('all')}><span className="trip-dot all-dot" /><span>All plans</span><span className="side-trip-count">{data.events.length}</span></button>
-          {data.trips.map((trip) => <button key={trip.id} className={`side-trip ${filter === trip.id ? 'selected' : ''}`} onClick={() => setFilter(filter === trip.id ? 'all' : trip.id)}><span className="trip-dot" style={{ backgroundColor: trip.color }} /><span className="side-trip-name">{trip.name}</span></button>)}
-        </div>
+        {view !== 'trips' && <>
+          <div className="trip-list-head"><span className="side-label">Your trips</span><button aria-label="Create trip" className="tiny-add" onClick={() => setTripModal('new')}><Icon name="plus" size={16} /></button></div>
+          <div className="side-trips">
+            <button className={`side-trip ${filter === 'all' ? 'selected' : ''}`} onClick={() => selectTripFilter('all')}><span className="trip-dot all-dot" /><span>All trips</span><span className="side-trip-count">{data.trips.length}</span></button>
+            {data.trips.map((trip) => <button key={trip.id} className={`side-trip ${filter === trip.id ? 'selected' : ''}`} onClick={() => selectTripFilter(trip.id)}><span className="trip-dot" style={{ backgroundColor: trip.color }} /><span className="side-trip-name">{trip.name}</span></button>)}
+          </div>
+        </>}
         <div className="sidebar-bottom">
           <div className="sync-card"><span className="sync-orb"><Icon name="sync" size={15} /></span><div><strong>{account ? 'Sync is ready' : 'Your plans, anywhere'}</strong><small>{lastSync ? `Synced ${new Date(lastSync).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'Saved on this device'}</small></div></div>
           {account
@@ -329,7 +367,7 @@ function App() {
 
         <div className="page-content">
           {view === 'calendar' && <CalendarView month={month} setMonth={setMonth} events={visibleEvents} trips={data.trips} onNew={() => setEventModal('new')} onEdit={setEventModal} />}
-          {view === 'timeline' && <TimelineView events={visibleEvents} trips={data.trips} onNew={() => setEventModal('new')} onEdit={setEventModal} />}
+          {view === 'timeline' && <TimelineView events={visibleEvents} trips={data.trips} focusRequest={timelineFocus} onFocusHandled={clearTimelineFocus} onNew={() => setEventModal('new')} onEdit={setEventModal} />}
           {view === 'trips' && <TripsView trips={data.trips} events={data.events} onNew={() => setTripModal('new')} onEdit={(trip) => navigate(`/trips/${encodeURIComponent(trip.id)}/edit`)} onNewEvent={() => setEventModal('new')} onOpenPlan={(tripId) => openTripPlan(tripId)} />}
           {view === 'plan' && activeTrip && <TripPlanPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate('/trips')} onEditTrip={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}/edit`)} onEditItinerary={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}/itinerary`)} onAddEvent={() => setEventModal('new')} onEditEvent={setEventModal} />}
           {view === 'itinerary' && activeTrip && <ItineraryEditorPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}`)} onAddEvent={() => setEventModal('new')} onEditEvent={setEventModal} onDeleteEvent={deleteEvent} onMoveEvent={saveEvent} />}
@@ -369,13 +407,15 @@ function CalendarView({ month, setMonth, events, trips, onNew, onEdit }: { month
   </section>
 }
 
-function TimelineView({ events, trips, onNew, onEdit }: { events: PlanEvent[]; trips: Trip[]; onNew: () => void; onEdit: (event: PlanEvent) => void }) {
+function TimelineView({ events, trips, focusRequest, onFocusHandled, onNew, onEdit }: { events: PlanEvent[]; trips: Trip[]; focusRequest: TimelineFocusRequest | null; onFocusHandled: (id: number) => void; onNew: () => void; onEdit: (event: PlanEvent) => void }) {
   const [currentTime, setCurrentTime] = useState(() => new Date())
   const todayStart = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate())
-  const [rangeStart, setRangeStart] = useState(() => shiftDate(todayStart, -30))
+  const [rangeStart, setRangeStart] = useState(() => shiftDate(focusRequest ? new Date(`${focusRequest.date}T12:00:00`) : todayStart, -30))
   const [dayCount, setDayCount] = useState(61)
   const listRef = useRef<HTMLDivElement>(null)
   const todayRef = useRef<HTMLDivElement>(null)
+  const dayRefs = useRef(new Map<string, HTMLDivElement>())
+  const handledFocusId = useRef<number | null>(null)
   const previousHeight = useRef(0)
   const prepending = useRef(false)
   const expanding = useRef(false)
@@ -395,7 +435,7 @@ function TimelineView({ events, trips, onNew, onEdit }: { events: PlanEvent[]; t
   }, [])
 
   useLayoutEffect(() => {
-    todayRef.current?.scrollIntoView({ block: 'center' })
+    if (!focusRequest) todayRef.current?.scrollIntoView({ block: 'center' })
   }, [])
 
   useLayoutEffect(() => {
@@ -404,6 +444,21 @@ function TimelineView({ events, trips, onNew, onEdit }: { events: PlanEvent[]; t
     prepending.current = false
     expanding.current = false
   }, [rangeStart, dayCount])
+
+  useLayoutEffect(() => {
+    if (!focusRequest || handledFocusId.current === focusRequest.id) return
+    const offset = dayDistance(dateOnly(rangeStart), focusRequest.date)
+    if (offset < 0 || offset >= dayCount) {
+      setRangeStart(shiftDate(new Date(`${focusRequest.date}T12:00:00`), -30))
+      setDayCount(61)
+      return
+    }
+    const target = dayRefs.current.get(focusRequest.date)
+    if (!target) return
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    handledFocusId.current = focusRequest.id
+    onFocusHandled(focusRequest.id)
+  }, [dayCount, focusRequest, onFocusHandled, rangeStart])
 
   const handleScroll = () => {
     const list = listRef.current
@@ -448,7 +503,7 @@ function TimelineView({ events, trips, onNew, onEdit }: { events: PlanEvent[]; t
         return { event, starts, ends, startMinute, endMinute, lane: laneIndex }
       })
       const laneCount = Math.max(laneEnds.length, 1)
-      return <div key={date} ref={isToday ? todayRef : undefined} className={`timeline-day ${dayEvents.length ? 'has-events' : ''} ${showSchedule ? 'has-schedule' : ''} ${isToday ? 'today-row' : ''}`}><div className="timeline-date"><span className={`timeline-date-number ${isToday ? 'today-number' : ''}`}>{prettyDate(date, { day: 'numeric' })}</span><span className="timeline-date-label">{isToday ? 'Today' : prettyDate(date, { weekday: 'short' })}</span></div><div className="timeline-rail"><i className={isPast ? 'rail-node past' : isToday ? 'rail-node today' : 'rail-node'} /></div><div className="timeline-content">{showSchedule ? <div className="timeline-schedule">{placements.map(({ event, starts, ends, startMinute, endMinute, lane }) => {
+      return <div key={date} ref={(element) => { if (element) dayRefs.current.set(date, element); else dayRefs.current.delete(date); if (isToday) todayRef.current = element }} className={`timeline-day ${dayEvents.length ? 'has-events' : ''} ${showSchedule ? 'has-schedule' : ''} ${isToday ? 'today-row' : ''}`}><div className="timeline-date"><span className={`timeline-date-number ${isToday ? 'today-number' : ''}`}>{prettyDate(date, { day: 'numeric' })}</span><span className="timeline-date-label">{isToday ? 'Today' : prettyDate(date, { weekday: 'short' })}</span></div><div className="timeline-rail"><i className={isPast ? 'rail-node past' : isToday ? 'rail-node today' : 'rail-node'} /></div><div className="timeline-content">{showSchedule ? <div className="timeline-schedule">{placements.map(({ event, starts, ends, startMinute, endMinute, lane }) => {
         const trip = trips.find((item) => item.id === event.tripId)
         const style = {
           '--event-color': trip?.color ?? '#8793a2',
