@@ -13,7 +13,6 @@ type PlannerSettings = {
   lastSync: string | null
   version: number
   syncedData: string | null
-  account: Account | null
 }
 const defaultSettings: PlannerSettings = {
   examplePlansPrompted: false,
@@ -21,10 +20,10 @@ const defaultSettings: PlannerSettings = {
   lastSync: null,
   version: 0,
   syncedData: null,
-  account: null,
 }
 const DATA_KEY = 'ezmygo-planner-data'
 const SETTINGS_KEY = 'ezmygo-settings'
+const ACCOUNT_KEY = 'ezmygo-account'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const palette = ['#e99961', '#729884', '#7f8fb5', '#c17986', '#b69a54', '#9078aa']
 const covers = [
@@ -59,7 +58,14 @@ function readStorage<T>(key: string, fallback: T): T {
   try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback } catch { return fallback }
 }
 function readSettings(): PlannerSettings {
-  return { ...defaultSettings, ...readStorage<Partial<PlannerSettings>>(SETTINGS_KEY, {}) }
+  const stored = readStorage<Partial<PlannerSettings>>(SETTINGS_KEY, {})
+  return {
+    examplePlansPrompted: stored.examplePlansPrompted ?? defaultSettings.examplePlansPrompted,
+    autoSync: stored.autoSync ?? defaultSettings.autoSync,
+    lastSync: stored.lastSync ?? defaultSettings.lastSync,
+    version: stored.version ?? defaultSettings.version,
+    syncedData: stored.syncedData ?? defaultSettings.syncedData,
+  }
 }
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 const prettyDate = (date: string, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }) =>
@@ -133,14 +139,12 @@ function App() {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [examplePromptOpen, setExamplePromptOpen] = useState(false)
   const [remoteConflictOpen, setRemoteConflictOpen] = useState(false)
+  const [account, setAccount] = useState<Account | null>(() => readStorage(ACCOUNT_KEY, null))
   const [settings, setSettings] = useState<PlannerSettings>(readSettings)
-  const { account, autoSync, lastSync, version } = settings
+  const { autoSync, lastSync, version } = settings
   const updateSettings = useCallback((updates: Partial<PlannerSettings>) => {
     setSettings((current) => ({ ...current, ...updates }))
   }, [])
-  const setAccount = useCallback((nextAccount: Account | null) => {
-    updateSettings({ account: nextAccount })
-  }, [updateSettings])
   const setAutoSync = useCallback((enabled: boolean) => {
     updateSettings({ autoSync: enabled })
   }, [updateSettings])
@@ -153,6 +157,10 @@ function App() {
 
   useEffect(() => { localStorage.setItem(DATA_KEY, JSON.stringify(data)) }, [data])
   useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) }, [settings])
+  useEffect(() => {
+    if (account) localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account))
+    else localStorage.removeItem(ACCOUNT_KEY)
+  }, [account])
   useEffect(() => { if (!notice) return; const timer = window.setTimeout(() => setNotice(''), 3500); return () => window.clearTimeout(timer) }, [notice])
   useEffect(() => { if (activeTripId) setFilter(activeTripId) }, [activeTripId])
   useEffect(() => {
