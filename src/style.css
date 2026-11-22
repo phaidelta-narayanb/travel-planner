@@ -199,6 +199,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .add-moment-banner small { color: #a0a69f; font-size: 9px; }
 .add-moment-banner > svg { margin-left: auto; color: #9da49d; }
 .empty-trips { display: grid; justify-items: center; padding: 60px 20px; border: 1px dashed #dfe3dc; border-radius: 7px; background: #fdfdfb; text-align: center; }
+.trips-heading-actions, .empty-trip-actions { display: flex; align-items: center; gap: 8px; }
 .empty-stamp { display: grid; width: 52px; height: 52px; place-items: center; border-radius: 50%; background: #eff3ed; color: #78907c; }
 .empty-trips h2 { margin: 16px 0 5px; color: #536158; font-family: var(--serif); font-size: 17px; }
 .empty-trips p { margin: 0 0 17px; color: #9ba29c; font-size: 11px; }
@@ -314,6 +315,53 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .auth-switch button:hover { text-decoration: underline; }
 .form-error { padding: 9px 10px; border: 1px solid #efd6d2; border-radius: 4px; background: #fcf4f2; color: #a35b52; font-size: 10px; }
 .offline-note { margin: 0; color: #a4aaa5; text-align: center; font-size: 9px; }
+.ai-planner-dialog { width: min(100%, 700px); max-height: calc(100dvh - 40px); overflow-y: auto; }
+.ai-form { gap: 12px; }
+.ai-destination-field { padding: 11px; border: 1px solid #dfe7dd; border-radius: 5px; background: #f8faf6; color: #536b57 !important; font-size: 11px !important; }
+.ai-destination-field .optional { color: #97a396; }
+.ai-destination-field .ai-destination-input { padding: 12px; border-color: #cdd9ce; background: #fff; color: #45554a; font-size: 13px; }
+.ai-form-actions { margin-top: 4px; }
+.ai-loading { display: grid; gap: 9px; margin-bottom: 15px; color: #66746a; font-size: 11px; }
+.ai-loading strong { font-size: 11px; font-weight: 600; }
+.ai-loading small { color: #969e98; font-size: 10px; }
+.ai-progress { height: 4px; overflow: hidden; border-radius: 5px; background: #edf0ea; }
+.ai-progress span { display: block; width: 35%; height: 100%; border-radius: inherit; background: #78947d; animation: ai-progress 1.4s ease-in-out infinite alternate; }
+@keyframes ai-progress { from { transform: translateX(-10%); } to { transform: translateX(210%); } }
+.ai-error { margin-bottom: 14px; }
+.ai-results { display: grid; gap: 13px; }
+.ai-result-summary { display: grid; gap: 5px; padding: 12px; border: 1px solid #e8ece5; border-radius: 5px; background: #fafbf8; color: #59665d; font-size: 11px; line-height: 1.5; }
+.ai-result-summary small { color: #969e98; font-size: 9px; }
+.ai-destination-list, .ai-change-list { display: grid; gap: 9px; }
+.ai-destination-card { display: grid; gap: 7px; padding: 13px; border: 1px solid #e8ebe5; border-radius: 5px; }
+.ai-card-title { display: flex; align-items: center; gap: 10px; }
+.ai-card-number { color: #ad8c68; font-family: var(--serif); font-size: 18px; }
+.ai-card-title h3 { margin: 0 0 3px; color: #49574d; font-family: var(--serif); font-size: 15px; }
+.ai-card-title div > span { display: flex; align-items: center; gap: 3px; color: #849087; font-size: 9px; }
+.ai-destination-card p { margin: 0; color: #7d887f; font-size: 10px; line-height: 1.55; }
+.ai-destination-card p strong { color: #59665d; font-weight: 600; }
+.ai-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 8px; border-top: 1px solid #eff1ed; }
+.ai-card-footer > small { color: #8c958d; font-size: 9px; }
+.ai-card-footer .secondary-button { height: 29px; font-size: 9px; }
+.ai-notice { margin: 0; color: #929b93; font-size: 9px; line-height: 1.5; }
+.ai-trip-context { display: grid; gap: 4px; padding: 11px; border: 1px solid #e8ece5; border-radius: 5px; background: #fafbf8; color: #5e6b62; font-size: 10px; }
+.ai-trip-context span, .ai-trip-context small { color: #8d978f; font-size: 9px; }
+.ai-focus-options { padding: 11px; border: 1px solid #e8ebe5; border-radius: 5px; }
+.ai-focus-options legend { padding: 0 4px; color: #626e66; font-size: 10px; font-weight: 600; }
+.ai-focus-options > div { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.ai-focus-option { display: flex !important; grid-template-columns: auto 1fr; align-items: center; gap: 5px !important; font-size: 9px !important; font-weight: 500 !important; }
+.ai-focus-option input, .ai-change > input { width: 14px; height: 14px; accent-color: #6f8b74; }
+.ai-change { display: flex; align-items: flex-start; gap: 9px; padding: 11px; border: 1px solid #e8ebe5; border-radius: 5px; cursor: pointer; }
+.ai-change > input { flex: 0 0 14px; margin: 2px 0 0; }
+.ai-change-content { display: grid; min-width: 0; flex: 1; gap: 5px; color: #7d887f; font-size: 9px; line-height: 1.5; }
+.ai-change-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ai-change-top strong { color: #526056; font-size: 10px; font-weight: 600; }
+.ai-change-top small { padding: 3px 6px; border-radius: 3px; background: #edf2eb; color: #6e876f; font-size: 8px; text-transform: uppercase; }
+.ai-change-remove .ai-change-top small { background: #fbefec; color: #a46b62; }
+.ai-event-preview { color: #939c94; font-size: 8px; }
+.ai-selection-actions { display: flex; align-items: center; gap: 12px; color: #929b93; font-size: 9px; }
+.ai-selection-actions .text-link { padding: 4px 0; border: 0; background: transparent; color: #64816d; font-size: 9px; }
+.ai-selection-actions > span { margin-left: auto; }
+.ai-no-changes { margin: 0; padding: 13px; border: 1px solid #e8ece5; border-radius: 5px; color: #69766c; font-size: 10px; line-height: 1.5; }
 
 @media (min-width: 1450px) { .page-content { padding-right: 55px; padding-left: 55px; } .calendar-day { min-height: 118px; } }
 @media (max-width: 1080px) {
@@ -380,6 +428,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .page-footer > span:nth-child(2) { margin-left: auto; }
   .auto-sync-toggle { width: 100%; justify-content: flex-end; }
   .timeline-page .page-heading, .trips-page .page-heading { margin-bottom: 23px; }
+  .trips-page .page-heading { flex-direction: column; }
+  .trips-heading-actions { width: 100%; flex-wrap: wrap; }
+  .trips-heading-actions .primary-button { margin-top: 0; }
+  .empty-trip-actions { flex-wrap: wrap; justify-content: center; }
   .timeline-day { grid-template-columns: 47px 16px minmax(0, 1fr); }
   .timeline-day.has-events, .timeline-day.has-schedule { min-height: 168px; }
   .timeline-date { padding-right: 7px; }

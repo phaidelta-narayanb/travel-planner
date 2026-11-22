@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type FormEvent, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { APP_NAME, APP_TAGLINE } from './config'
-import type { PlanEvent, PlannerData, Trip } from './types'
+import type { DestinationPreferences, DestinationSuggestion, DestinationSuggestionsResponse, ItineraryProposalResponse, PlanEvent, PlannerData, ProposedChange, Trip } from './types'
 
 type View = 'calendar' | 'timeline' | 'trips' | 'plan' | 'itinerary' | 'trip-edit' | 'not-found'
 type AppRoute = { view: View; tripId?: string }
 type TimelineFocusRequest = { date: string; id: number }
 type Account = { email: string; token: string }
+type AIPlannerMode = { mode: 'destinations' } | { mode: 'itinerary'; tripId: string }
+type TripPrefill = Partial<Pick<Trip, 'name' | 'destination' | 'startDate' | 'endDate' | 'note'>> & { suggestedDurationDays?: number }
 type PlannerSettings = {
   examplePlansPrompted: boolean
   autoSync: boolean
@@ -14,6 +16,7 @@ type PlannerSettings = {
   version: number
   syncedData: string | null
 }
+type StoredPlannerSettings = Omit<Partial<PlannerSettings>, 'lastSync'> & { lastSync?: string | number | null }
 const defaultSettings: PlannerSettings = {
   examplePlansPrompted: false,
   autoSync: true,
@@ -57,12 +60,20 @@ const exampleData: PlannerData = {
 function readStorage<T>(key: string, fallback: T): T {
   try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback } catch { return fallback }
 }
+function normalizeSyncTimestamp(value: string | number | null | undefined): string | null {
+  if (value == null || value === '') return null
+  const numeric = typeof value === 'number' || /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : null
+  const date = numeric === null
+    ? new Date(value)
+    : new Date(Math.abs(numeric) < 1e12 ? numeric * 1000 : numeric)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
 function readSettings(): PlannerSettings {
-  const stored = readStorage<Partial<PlannerSettings>>(SETTINGS_KEY, {})
+  const stored = readStorage<StoredPlannerSettings>(SETTINGS_KEY, {})
   return {
     examplePlansPrompted: stored.examplePlansPrompted ?? defaultSettings.examplePlansPrompted,
     autoSync: stored.autoSync ?? defaultSettings.autoSync,
-    lastSync: stored.lastSync ?? defaultSettings.lastSync,
+    lastSync: normalizeSyncTimestamp(stored.lastSync) ?? defaultSettings.lastSync,
     version: stored.version ?? defaultSettings.version,
     syncedData: stored.syncedData ?? defaultSettings.syncedData,
   }
@@ -135,6 +146,8 @@ function App() {
   const timelineFocusId = useRef(0)
   const [eventModal, setEventModal] = useState<PlanEvent | 'new' | null>(null)
   const [tripModal, setTripModal] = useState<Trip | 'new' | null>(null)
+  const [tripPrefill, setTripPrefill] = useState<TripPrefill | undefined>()
+  const [aiModal, setAiModal] = useState<AIPlannerMode | null>(null)
   const [accountOpen, setAccountOpen] = useState(false)
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [examplePromptOpen, setExamplePromptOpen] = useState(false)
@@ -150,10 +163,10 @@ function App() {
   }, [updateSettings])
   const [syncing, setSyncing] = useState(false)
   const [notice, setNotice] = useState('')
-  const [pendingRemote, setPendingRemote] = useState<{ data: PlannerData; version: number; created_at?: number } | null>(null)
+  const [pendingRemote, setPendingRemote] = useState<{ data: PlannerData; version: number; created_at?: number | string } | null>(null)
   const lastSyncedData = useRef<string | null>(settings.syncedData)
   const modalHistoryPath = useRef<string | null>(null)
-  const modalOpen = Boolean(eventModal || tripModal || accountOpen || logoutConfirmOpen || examplePromptOpen || remoteConflictOpen)
+  const modalOpen = Boolean(eventModal || tripModal || aiModal || accountOpen || logoutConfirmOpen || examplePromptOpen || remoteConflictOpen)
 
   useEffect(() => { localStorage.setItem(DATA_KEY, JSON.stringify(data)) }, [data])
   useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) }, [settings])
@@ -188,6 +201,7 @@ function App() {
       modalHistoryPath.current = null
       setEventModal(null)
       setTripModal(null)
+      setAiModal(null)
       setAccountOpen(false)
       setLogoutConfirmOpen(false)
       setExamplePromptOpen(false)
@@ -220,10 +234,10 @@ function App() {
       }
       if (response.status === 409) throw new Error("A newer version exists on the server. Review your account's latest snapshot before syncing.")
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || 'Could not sync your plans.')
-      const result = await response.json() as { version: number; created_at: string }
+      const result = await response.json() as { version: number; created_at: number | string | null }
       const syncedData = JSON.stringify(data)
       lastSyncedData.current = syncedData
-      const syncedAt = result.created_at || new Date().toISOString()
+      const syncedAt = normalizeSyncTimestamp(result.created_at) ?? new Date().toISOString()
       updateSettings({ version: result.version, syncedData, lastSync: syncedAt })
       if (!quiet) setNotice('Everything is up to date.')
     } catch (error) {
@@ -296,10 +310,55 @@ function App() {
   const saveEvent = (event: PlanEvent) => setData((current) => ({ ...current, events: [...current.events.filter((item) => item.id !== event.id), event].sort((a, b) => a.start.localeCompare(b.start)) }))
   const deleteEvent = (id: string) => { setData((current) => ({ ...current, events: current.events.filter((event) => event.id !== id) })); setEventModal(null) }
   const saveTrip = (trip: Trip) => setData((current) => ({ ...current, trips: [...current.trips.filter((item) => item.id !== trip.id), trip].sort((a, b) => a.startDate.localeCompare(b.startDate)) }))
+  const openNewTrip = () => { setTripPrefill(undefined); setTripModal('new') }
+  const openAIPlanner = (planner: AIPlannerMode) => {
+    if (!account) {
+      setNotice('Sign in to use AI trip planning.')
+      setAccountOpen(true)
+      return
+    }
+    setAiModal(planner)
+  }
+  const useDestination = (suggestion: DestinationSuggestion, preferences: DestinationPreferences) => {
+    setTripPrefill({
+      name: suggestion.trip_name,
+      destination: suggestion.destination,
+      startDate: preferences.start_date,
+      endDate: preferences.end_date,
+      note: suggestion.overview,
+      suggestedDurationDays: suggestion.ideal_duration_days,
+    })
+    setAiModal(null)
+    setTripModal('new')
+  }
+  const applyAIChanges = (changes: ProposedChange[]) => {
+    setData((current) => {
+      let events = [...current.events]
+      for (const change of changes) {
+        if (change.action === 'add' && change.event) {
+          events.push(change.event)
+        } else if (change.action === 'update' && change.event && change.event_id) {
+          const replacement = change.event
+          events = events.map((event) => event.id === change.event_id ? replacement : event)
+        } else if (change.action === 'remove' && change.event_id) {
+          events = events.filter((event) => event.id !== change.event_id)
+        }
+      }
+      return { ...current, events: events.sort((a, b) => a.start.localeCompare(b.start)) }
+    })
+    setAiModal(null)
+    setNotice(`${changes.length} AI ${changes.length === 1 ? 'suggestion' : 'suggestions'} applied to this device.`)
+  }
+  const handleAIAuthExpired = () => {
+    setAccount(null)
+    setAiModal(null)
+    setAccountOpen(true)
+    setNotice('Your session expired. Sign in again to use AI planning.')
+  }
   const deleteTrip = (id: string) => {
     setData((current) => ({ trips: current.trips.filter((trip) => trip.id !== id), events: current.events.filter((event) => event.tripId !== id) }))
     if (filter?.includes(id)) setFilter(filter.filter((tripId) => tripId !== id))
-    if (activeTripId === id) navigate('/trips')
+    if (activeTripId === id) navigate('/trips', { replace: true })
     setTripModal(null)
   }
   const openTripPlan = (tripId: string, destination: 'plan' | 'itinerary' = 'plan') => {
@@ -329,10 +388,8 @@ function App() {
       const syncedData = JSON.stringify(snapshot)
       lastSyncedData.current = syncedData
       const settingsUpdate: Partial<PlannerSettings> = { version: remoteVersion, syncedData }
-      if (body.created_at) {
-        const syncedAt = new Date(body.created_at * 1000).toISOString()
-        settingsUpdate.lastSync = syncedAt
-      }
+      const syncedAt = normalizeSyncTimestamp(body.created_at)
+      if (syncedAt) settingsUpdate.lastSync = syncedAt
       updateSettings(settingsUpdate)
       setAccountOpen(false); setNotice('Your latest synced plans are ready on this device.')
     } else {
@@ -388,10 +445,8 @@ function App() {
       version: pendingRemote.version,
       syncedData,
     }
-    if (pendingRemote.created_at) {
-      const syncedAt = new Date(pendingRemote.created_at * 1000).toISOString()
-      settingsUpdate.lastSync = syncedAt
-    }
+    const syncedAt = normalizeSyncTimestamp(pendingRemote.created_at)
+    if (syncedAt) settingsUpdate.lastSync = syncedAt
     updateSettings(settingsUpdate)
     setPendingRemote(null)
     setRemoteConflictOpen(false)
@@ -409,7 +464,7 @@ function App() {
           <Link className={view === 'trips' || view === 'plan' || view === 'itinerary' || view === 'trip-edit' ? 'nav-item active' : 'nav-item'} to="/trips"><Icon name="grid" />My trips<span className="nav-count">{data.trips.length}</span></Link>
         </nav>
         {view !== 'trips' && <>
-          <div className="trip-list-head"><span className="side-label">Your trips</span><button aria-label="Create trip" className="tiny-add" onClick={() => setTripModal('new')}><Icon name="plus" size={16} /></button></div>
+          <div className="trip-list-head"><span className="side-label">Your trips</span><button aria-label="Create trip" className="tiny-add" onClick={openNewTrip}><Icon name="plus" size={16} /></button></div>
           <div className="side-trips">
             <button className={`side-trip ${filter === null ? 'selected' : ''}`} onClick={() => selectTripFilter('all')}><span className="trip-dot all-dot" /><span>All trips</span><span className="side-trip-count">{data.trips.length}</span></button>
             {data.trips.map((trip) => <button key={trip.id} className={`side-trip ${filter?.includes(trip.id) ? 'selected' : ''}`} onClick={() => selectTripFilter(trip.id)}><span className="trip-dot" style={{ backgroundColor: trip.color }} /><span className="side-trip-name">{trip.name}</span></button>)}
@@ -433,16 +488,17 @@ function App() {
           {(view === 'calendar' || view === 'timeline') && <MobileTripFilter trips={data.trips} selectedTripIds={filter} onSelectAll={() => selectTripFilter('all')} onToggleTrip={toggleTripFilter} />}
           {view === 'calendar' && <CalendarView month={month} setMonth={setMonth} events={visibleEvents} trips={data.trips} onNew={() => setEventModal('new')} onEdit={setEventModal} />}
           {view === 'timeline' && <TimelineView events={visibleEvents} trips={data.trips} focusRequest={timelineFocus} onFocusHandled={clearTimelineFocus} onNew={() => setEventModal('new')} onEdit={setEventModal} />}
-          {view === 'trips' && <TripsView trips={data.trips} events={data.events} onNew={() => setTripModal('new')} onEdit={(trip) => navigate(`/trips/${encodeURIComponent(trip.id)}/edit`)} onNewEvent={() => setEventModal('new')} onOpenPlan={(tripId) => openTripPlan(tripId)} />}
-          {view === 'plan' && activeTrip && <TripPlanPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate('/trips')} onEditTrip={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}/edit`)} onEditItinerary={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}/itinerary`)} onAddEvent={() => setEventModal('new')} onEditEvent={setEventModal} />}
-          {view === 'itinerary' && activeTrip && <ItineraryEditorPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}`)} onAddEvent={() => setEventModal('new')} onEditEvent={setEventModal} onDeleteEvent={deleteEvent} onMoveEvent={saveEvent} />}
-          {view === 'trip-edit' && activeTrip && <TripEditorPage trip={activeTrip} onCancel={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}`)} onSave={(trip) => { saveTrip(trip); setNotice('Trip saved.'); navigate(`/trips/${encodeURIComponent(trip.id)}`) }} onDelete={deleteTrip} />}
+          {view === 'trips' && <TripsView trips={data.trips} events={data.events} onNew={openNewTrip} onDiscover={() => openAIPlanner({ mode: 'destinations' })} onEdit={(trip) => navigate(`/trips/${encodeURIComponent(trip.id)}/edit`)} onNewEvent={() => setEventModal('new')} onOpenPlan={(tripId) => openTripPlan(tripId)} />}
+          {view === 'plan' && activeTrip && <TripPlanPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate('/trips', { replace: true })} onEditTrip={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}/edit`)} onEditItinerary={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}/itinerary`)} onAddEvent={() => setEventModal('new')} onEditEvent={setEventModal} onPlanWithAI={() => openAIPlanner({ mode: 'itinerary', tripId: activeTrip.id })} />}
+          {view === 'itinerary' && activeTrip && <ItineraryEditorPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}`, { replace: true })} onAddEvent={() => setEventModal('new')} onEditEvent={setEventModal} onDeleteEvent={deleteEvent} onMoveEvent={saveEvent} />}
+          {view === 'trip-edit' && activeTrip && <TripEditorPage trip={activeTrip} onCancel={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}`, { replace: true })} onSave={(trip) => { saveTrip(trip); setNotice('Trip saved.'); navigate(`/trips/${encodeURIComponent(trip.id)}`, { replace: true }) }} onDelete={deleteTrip} />}
           {(view === 'not-found' || (activeTripId && !activeTrip)) && <section className="not-found-page"><div className="eyebrow"><span className="eyebrow-line" />NOT HERE</div><h1>We couldn't find that page<span>.</span></h1><p>This trip may have been removed, or the address may be out of date.</p><Link className="primary-button" to="/trips">Back to all trips</Link></section>}
           {(view === 'calendar' || view === 'timeline') && <footer className="page-footer"><span><span className="footer-dot" />{activeTrips} upcoming {activeTrips === 1 ? 'trip' : 'trips'}</span><span>{visibleEvents.length} plans across {filteredTrips.length} {filteredTrips.length === 1 ? 'trip' : 'trips'}</span><button className="auto-sync-toggle" onClick={() => setAutoSync(!autoSync)}><span className={`toggle ${autoSync ? 'on' : ''}`}><i /></span>Auto-sync {autoSync ? 'on' : 'off'}</button></footer>}
         </div>
       </main>
       {eventModal && <EventDialog initial={eventModal === 'new' ? null : eventModal} trips={data.trips} defaultTripId={activeTripId ?? undefined} onClose={() => setEventModal(null)} onSave={(event) => { saveEvent(event); setEventModal(null); setNotice('Plan saved on this device.') }} onDelete={deleteEvent} onEditPlan={(tripId) => openTripPlan(tripId)} />}
-      {tripModal && <TripDialog initial={tripModal === 'new' ? null : tripModal} onClose={() => setTripModal(null)} onSave={(trip) => { saveTrip(trip); setTripModal(null); setNotice('Trip saved.') }} onDelete={deleteTrip} />}
+      {tripModal && <TripDialog initial={tripModal === 'new' ? null : tripModal} prefill={tripPrefill} onClose={() => { setTripModal(null); setTripPrefill(undefined) }} onSave={(trip) => { saveTrip(trip); setTripModal(null); setTripPrefill(undefined); setNotice('Trip saved.') }} onDelete={deleteTrip} />}
+      {aiModal && account && <AIPlannerDialog mode={aiModal.mode} account={account} trip={aiModal.mode === 'itinerary' ? data.trips.find((trip) => trip.id === aiModal.tripId) ?? null : null} events={aiModal.mode === 'itinerary' ? data.events.filter((event) => event.tripId === aiModal.tripId) : []} onClose={() => setAiModal(null)} onUseDestination={useDestination} onApplyChanges={applyAIChanges} onAuthExpired={handleAIAuthExpired} />}
       {accountOpen && <AccountDialog account={account} onClose={() => setAccountOpen(false)} onAuth={doAuth} onRequestLogout={requestLogout} onSync={() => void syncData()} lastSync={lastSync} autoSync={autoSync} setAutoSync={setAutoSync} />}
       {examplePromptOpen && <DialogFrame title="A few plans to get you going?" subtitle="Would you like to explore EzMyGo with a few example trips? You can edit or delete them anytime." onClose={() => setExamplePromptOpen(false)} className="account-dialog"><div className="dialog-actions"><button className="secondary-button" onClick={() => setExamplePromptOpen(false)}>Maybe later</button><span /><button className="primary-button" onClick={addExamplePlans}>Add example trips</button></div></DialogFrame>}
       {logoutConfirmOpen && <DialogFrame title="Sign out?" subtitle="Your plans will stay saved on this device. You can sign in again to sync." onClose={() => setLogoutConfirmOpen(false)} className="logout-confirm-dialog"><div className="dialog-actions"><span /><button className="secondary-button" onClick={() => setLogoutConfirmOpen(false)}>Cancel</button><button className="primary-button confirm-logout-button" onClick={confirmLogout}>Log out</button></div></DialogFrame>}
@@ -611,7 +667,7 @@ function TimelineView({ events, trips, focusRequest, onFocusHandled, onNew, onEd
   </section>
 }
 
-function TripPlanPage({ trip, events, onBack, onEditTrip, onEditItinerary, onAddEvent, onEditEvent }: {
+function TripPlanPage({ trip, events, onBack, onEditTrip, onEditItinerary, onAddEvent, onEditEvent, onPlanWithAI }: {
   trip: Trip
   events: PlanEvent[]
   onBack: () => void
@@ -619,6 +675,7 @@ function TripPlanPage({ trip, events, onBack, onEditTrip, onEditItinerary, onAdd
   onEditItinerary: () => void
   onAddEvent: () => void
   onEditEvent: (event: PlanEvent) => void
+  onPlanWithAI: () => void
 }) {
   const sortedEvents = [...events].sort((a, b) => a.start.localeCompare(b.start))
   return <section className="trip-plan-page">
@@ -633,7 +690,7 @@ function TripPlanPage({ trip, events, onBack, onEditTrip, onEditItinerary, onAdd
       {trip.note && <span>{trip.note}</span>}
     </div>
     <section className="plan-itinerary-section">
-      <div className="plan-section-heading"><div><span className="eyebrow"><span className="eyebrow-line" />THE DETAILS</span><h2>Your itinerary</h2></div><div className="plan-header-actions"><button className="secondary-button" onClick={onAddEvent}><Icon name="plus" size={14} />Add a plan</button><button className="secondary-button" onClick={onEditItinerary}>View all events <span className="plan-event-count">{events.length}</span></button></div></div>
+      <div className="plan-section-heading"><div><span className="eyebrow"><span className="eyebrow-line" />THE DETAILS</span><h2>Your itinerary</h2></div><div className="plan-header-actions"><button className="secondary-button" onClick={onPlanWithAI}><Icon name="pin" size={14} />Suggest with AI</button><button className="secondary-button" onClick={onAddEvent}><Icon name="plus" size={14} />Add a plan</button><button className="secondary-button" onClick={onEditItinerary}>View all events <span className="plan-event-count">{events.length}</span></button></div></div>
       {sortedEvents.length ? <div className="plan-preview-list">{sortedEvents.slice(0, 5).map((event) => <button className="plan-preview-event" key={event.id} onClick={() => onEditEvent(event)}><span className="plan-preview-color" style={{ background: trip.color }} /><span className="plan-preview-date">{prettyDate(eventDay(event), { month: 'short', day: 'numeric' })}</span><span className="plan-preview-main"><strong>{event.title}</strong><small>{eventTypeLabel[event.type]}{event.location ? ` · ${event.location}` : ''}</small></span><span className="plan-preview-time">{eventTimeRange(event)}</span><Icon name="chevron" size={15} /></button>)}</div> : <div className="plan-empty"><p>No events in this trip yet. Add your first reservation, activity, or reminder.</p><button className="primary-button" onClick={onAddEvent}><Icon name="plus" size={15} />Add a plan</button></div>}
       {sortedEvents.length > 5 && <button className="plan-view-all" onClick={onEditItinerary}>View all {events.length} events</button>}
     </section>
@@ -691,8 +748,8 @@ function ItineraryEditorPage({ trip, events, onBack, onAddEvent, onEditEvent, on
   </section>
 }
 
-function TripsView({ trips, events, onNew, onEdit, onNewEvent, onOpenPlan }: { trips: Trip[]; events: PlanEvent[]; onNew: () => void; onEdit: (trip: Trip) => void; onNewEvent: () => void; onOpenPlan: (tripId: string) => void }) {
-  return <section className="trips-page"><div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />COLLECT MOMENTS, NOT THINGS</div><h1>Everywhere, <span>eventually.</span></h1><p>Your trips, little plans, and the places you'll remember.</p></div><button className="primary-button" onClick={onNew}><Icon name="plus" size={17} />Plan a new trip</button></div>
+function TripsView({ trips, events, onNew, onDiscover, onEdit, onNewEvent, onOpenPlan }: { trips: Trip[]; events: PlanEvent[]; onNew: () => void; onDiscover: () => void; onEdit: (trip: Trip) => void; onNewEvent: () => void; onOpenPlan: (tripId: string) => void }) {
+  return <section className="trips-page"><div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />COLLECT MOMENTS, NOT THINGS</div><h1>Everywhere, <span>eventually.</span></h1><p>Your trips, little plans, and the places you'll remember.</p></div><div className="trips-heading-actions"><button className="secondary-button" onClick={onDiscover}><Icon name="pin" size={15} />Explore with AI</button><button className="primary-button" onClick={onNew}><Icon name="plus" size={17} />Plan a new trip</button></div></div>
     {trips.length ? <><div className="trips-overview"><div><span className="overview-number">{trips.length.toString().padStart(2, '0')}</span><span className="overview-label">TRIPS PLANNED</span></div><span className="overview-divider" /><div><span className="overview-number">{events.length.toString().padStart(2, '0')}</span><span className="overview-label">LITTLE MOMENTS</span></div><div className="overview-note">Somewhere new is always closer than it feels.</div></div>
     <div className="trip-cards">{trips.map((trip, index) => {
       const count = events.filter((event) => event.tripId === trip.id).length
@@ -705,6 +762,202 @@ function TripsView({ trips, events, onNew, onEdit, onNewEvent, onOpenPlan }: { t
 
 function DialogFrame({ title, subtitle, onClose, children, className = '' }: { title: string; subtitle: string; onClose: () => void; children: ReactNode; className?: string }) {
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className={`dialog ${className}`} role="dialog" aria-modal="true" aria-label={title}><button className="dialog-close" onClick={onClose} aria-label="Close dialog">×</button><div className="dialog-kicker">{APP_NAME.toUpperCase()} / YOUR JOURNEY</div><h2>{title}</h2><p className="dialog-subtitle">{subtitle}</p>{children}</section></div>
+}
+
+function AIPlannerDialog({ mode, account, trip, events, onClose, onUseDestination, onApplyChanges, onAuthExpired }: {
+  mode: AIPlannerMode['mode']
+  account: Account
+  trip: Trip | null
+  events: PlanEvent[]
+  onClose: () => void
+  onUseDestination: (suggestion: DestinationSuggestion, preferences: DestinationPreferences) => void
+  onApplyChanges: (changes: ProposedChange[]) => void
+  onAuthExpired: () => void
+}) {
+  const [departureRegion, setDepartureRegion] = useState('')
+  const [preferredDestination, setPreferredDestination] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [budget, setBudget] = useState<DestinationPreferences['budget'] | ''>('')
+  const [interests, setInterests] = useState('')
+  const [travelPace, setTravelPace] = useState<DestinationPreferences['travel_pace'] | ''>('')
+  const [travelParty, setTravelParty] = useState('')
+  const [notes, setNotes] = useState('')
+  const [focusAreas, setFocusAreas] = useState<string[]>(['activities', 'sightseeing', 'transport', 'stays', 'food', 'shopping'])
+  const [preferences, setPreferences] = useState<DestinationPreferences>({})
+  const [destinationResult, setDestinationResult] = useState<DestinationSuggestionsResponse | null>(null)
+  const [proposalResult, setProposalResult] = useState<ItineraryProposalResponse | null>(null)
+  const [selectedChangeIds, setSelectedChangeIds] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [showResults, setShowResults] = useState(false)
+
+  const requestAI = async <T,>(path: string, payload: unknown): Promise<T> => {
+    const response = await fetch(`${API_URL}/api/ai/${path}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const body: unknown = await response.json().catch(() => null)
+    if (response.status === 401) {
+      onAuthExpired()
+      throw new Error('Your session expired. Sign in again to use AI planning.')
+    }
+    if (!response.ok) {
+      const detail = body && typeof body === 'object' && 'detail' in body ? body.detail : undefined
+      const message = typeof detail === 'string'
+        ? detail
+        : detail && typeof detail === 'object' && 'message' in detail && typeof detail.message === 'string'
+          ? detail.message
+          : Array.isArray(detail) && detail[0] && typeof detail[0] === 'object' && 'msg' in detail[0] && typeof detail[0].msg === 'string'
+            ? detail[0].msg
+            : 'AI planning could not be completed.'
+      throw new Error(message)
+    }
+    return body as T
+  }
+
+  const askForDestinations = async (submittedPreferences: DestinationPreferences) => {
+    setError('')
+    setLoading(true)
+    setPreferences(submittedPreferences)
+    try {
+      setDestinationResult(await requestAI<DestinationSuggestionsResponse>('destinations', submittedPreferences))
+      setShowResults(true)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'AI planning could not be completed.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const submitDestinationPreferences = (event: FormEvent) => {
+    event.preventDefault()
+    if (Boolean(startDate) !== Boolean(endDate)) {
+      setError('Enter both travel dates, or leave both blank.')
+      return
+    }
+    const submittedPreferences: DestinationPreferences = {
+      ...(departureRegion.trim() ? { departure_region: departureRegion.trim() } : {}),
+      ...(preferredDestination.trim() ? { destination: preferredDestination.trim() } : {}),
+      ...(startDate ? { start_date: startDate, end_date: endDate } : {}),
+      ...(budget ? { budget } : {}),
+      ...(interests.trim() ? { interests: interests.split(',').map((interest) => interest.trim()).filter(Boolean) } : {}),
+      ...(travelPace ? { travel_pace: travelPace } : {}),
+      ...(travelParty.trim() ? { travel_party: travelParty.trim() } : {}),
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
+    }
+    void askForDestinations(submittedPreferences)
+  }
+
+  const askForItinerary = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!trip) return
+    setError('')
+    setLoading(true)
+    try {
+      const proposal = await requestAI<ItineraryProposalResponse>('itinerary', {
+        trip: { ...trip, image: '', note: undefined },
+        events: events.map(({ id, tripId, title, type, start, end, location }) => ({
+          id,
+          tripId,
+          title,
+          type,
+          start,
+          ...(end ? { end } : {}),
+          ...(location ? { location } : {}),
+        })),
+        focus_areas: focusAreas,
+        notes: notes.trim() || undefined,
+      })
+      setProposalResult(proposal)
+      setSelectedChangeIds(proposal.changes.filter((change) => change.action !== 'remove').map((change) => change.change_id))
+      setShowResults(true)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'AI planning could not be completed.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const toggleFocusArea = (area: string) => {
+    setFocusAreas((current) => current.includes(area) ? current.filter((value) => value !== area) : [...current, area])
+  }
+  const toggleChange = (changeId: string) => {
+    setSelectedChangeIds((current) => current.includes(changeId) ? current.filter((id) => id !== changeId) : [...current, changeId])
+  }
+  const setAllChangesSelected = (selected: boolean) => {
+    setSelectedChangeIds(selected ? proposalResult?.changes.map((change) => change.change_id) ?? [] : [])
+  }
+  const applySelectedChanges = () => {
+    if (!proposalResult) return
+    onApplyChanges(proposalResult.changes.filter((change) => selectedChangeIds.includes(change.change_id)))
+  }
+
+  const isDestinationMode = mode === 'destinations'
+  const title = isDestinationMode ? showResults ? 'A few places to dream about.' : 'Where to next?' : 'A thoughtful plan, together.'
+  const subtitle = isDestinationMode
+    ? 'Tell us where you’d like to go, then add a starting point and other preferences—or let EzMyGo suggest places for the season.'
+    : trip ? `Review ${trip.name} and suggest itinerary improvements.` : 'This trip is no longer available.'
+  const closeToForm = () => { setShowResults(false); setError('') }
+
+  return <DialogFrame title={title} subtitle={subtitle} onClose={onClose} className="ai-planner-dialog">
+    {loading && <div className="ai-loading" role="status" aria-live="polite"><div className="ai-progress"><span /></div><strong>{isDestinationMode ? 'Considering the season and your preferences…' : 'Reviewing your itinerary and drafting ideas…'}</strong><small>This may take a little while. Your plans won’t change unless you apply suggestions.</small></div>}
+    {error && <div className="form-error ai-error" role="alert">{error}</div>}
+
+    {isDestinationMode && !showResults && <form className="dialog-form ai-form" onSubmit={submitDestinationPreferences}>
+      <label className="ai-destination-field">Where would you like to go? <span className="optional">(optional)</span><input className="ai-destination-input" value={preferredDestination} onChange={(event) => setPreferredDestination(event.target.value)} placeholder="A city, country, or region" /></label>
+      <label>Where are you starting from? <span className="optional">(optional)</span><input value={departureRegion} onChange={(event) => setDepartureRegion(event.target.value)} placeholder="City, region, or airport" /></label>
+      <div className="form-two"><label>Travel dates <span className="optional">(optional)</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>Return date<input type="date" min={startDate || undefined} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div>
+      <div className="form-two"><label>Budget <span className="optional">(optional)</span><select value={budget} onChange={(event) => setBudget(event.target.value as DestinationPreferences['budget'] | '')}><option value="">Any budget</option><option value="budget">Budget-conscious</option><option value="moderate">Moderate</option><option value="premium">Premium</option><option value="luxury">Luxury</option><option value="flexible">Flexible</option></select></label><label>Travel pace <span className="optional">(optional)</span><select value={travelPace} onChange={(event) => setTravelPace(event.target.value as DestinationPreferences['travel_pace'] | '')}><option value="">Any pace</option><option value="relaxed">Relaxed</option><option value="balanced">Balanced</option><option value="packed">Packed</option></select></label></div>
+      <label>What do you enjoy? <span className="optional">(optional, comma-separated)</span><input value={interests} onChange={(event) => setInterests(event.target.value)} placeholder="Food, museums, nature, beaches…" /></label>
+      <label>Who’s traveling? <span className="optional">(optional)</span><input value={travelParty} onChange={(event) => setTravelParty(event.target.value)} placeholder="Solo, family, friends…" /></label>
+      <label>Anything else? <span className="optional">(optional)</span><textarea rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Accessibility needs, things to avoid, or a kind of trip you have in mind" /></label>
+      <p className="ai-notice">Your answers are sent to OpenAI to generate ideas. They are not added to your saved plans.</p>
+      <div className="dialog-actions ai-form-actions"><button type="button" className="secondary-button" disabled={loading} onClick={() => void askForDestinations({})}>Surprise me</button><span /><button className="primary-button" disabled={loading}>Find destinations</button></div>
+    </form>}
+
+    {isDestinationMode && showResults && destinationResult && <div className="ai-results">
+      <div className="ai-result-summary"><strong>{destinationResult.summary}</strong><small>Season considered from {prettyDate(destinationResult.current_date, { month: 'long', day: 'numeric', year: 'numeric' })}</small></div>
+      <div className="ai-destination-list">{destinationResult.suggestions.map((suggestion, index) => <article className="ai-destination-card" key={`${suggestion.destination}-${index}`}>
+        <div className="ai-card-title"><span className="ai-card-number">{String(index + 1).padStart(2, '0')}</span><div><h3>{suggestion.trip_name}</h3><span><Icon name="pinSmall" size={13} />{suggestion.destination}</span></div></div>
+        <p>{suggestion.overview}</p><p><strong>Why it fits:</strong> {suggestion.why_it_fits}</p><p><strong>Season:</strong> {suggestion.seasonal_fit}</p>
+        <div className="ai-card-footer"><small>About {suggestion.ideal_duration_days} days</small><button className="secondary-button" onClick={() => onUseDestination(suggestion, preferences)}>Use this destination</button></div>
+      </article>)}</div>
+      <p className="ai-notice">{destinationResult.notice}</p>
+      <div className="dialog-actions"><button className="secondary-button" onClick={closeToForm}>Adjust preferences</button><span /><button className="secondary-button" onClick={() => void askForDestinations(preferences)}>Try another set</button></div>
+    </div>}
+
+    {!isDestinationMode && !showResults && trip && <form className="dialog-form ai-form" onSubmit={(event) => void askForItinerary(event)}>
+      <div className="ai-trip-context"><strong>{trip.destination}</strong><span>{prettyDate(trip.startDate)} – {prettyDate(trip.endDate, { month: 'short', day: 'numeric', year: 'numeric' })}</span><small>{events.length} existing {events.length === 1 ? 'plan' : 'plans'} will be reviewed. Good items should be kept.</small></div>
+      <fieldset className="ai-focus-options"><legend>What should the suggestions focus on?</legend><div>{[['activities', 'Activities'], ['sightseeing', 'Places to see'], ['transport', 'Getting around'], ['stays', 'Places to stay'], ['food', 'Food'], ['shopping', 'Shopping']].map(([value, label]) => <label key={value} className="ai-focus-option"><input type="checkbox" checked={focusAreas.includes(value)} onChange={() => toggleFocusArea(value)} />{label}</label>)}</div></fieldset>
+      <label>Anything specific to improve? <span className="optional">(optional)</span><textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Keep mornings relaxed, add a day trip, avoid long walks…" /></label>
+      <p className="ai-notice">Trip dates, event titles, times, locations, and your message are sent to OpenAI. Existing trip notes and booking details are excluded. Nothing changes until you review and apply suggestions.</p>
+      <div className="dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><span /><button className="primary-button" disabled={loading || focusAreas.length === 0}>Suggest itinerary</button></div>
+    </form>}
+
+    {!isDestinationMode && showResults && proposalResult && <div className="ai-results">
+      <div className="ai-result-summary"><strong>{proposalResult.summary}</strong><small>{proposalResult.changes.length} suggested {proposalResult.changes.length === 1 ? 'change' : 'changes'} for {trip?.name}</small></div>
+      {proposalResult.changes.length ? <><div className="ai-change-list">{proposalResult.changes.map((change) => {
+        const originalEvent = change.event_id ? events.find((event) => event.id === change.event_id) : undefined
+        const previewLabel = change.action === 'add' ? 'Proposed' : change.action === 'update' ? 'Suggested' : 'Will remove'
+        return <label className={`ai-change ai-change-${change.action}`} key={change.change_id}>
+          <input type="checkbox" checked={selectedChangeIds.includes(change.change_id)} onChange={() => toggleChange(change.change_id)} />
+          <span className="ai-change-content"><span className="ai-change-top"><strong>{change.summary}</strong><small>{change.action === 'add' ? 'Add' : change.action === 'update' ? 'Update' : 'Remove'}</small></span>
+            <span>{change.rationale}</span>{change.action === 'update' && originalEvent && <small className="ai-event-preview">Current: {originalEvent.title} · {prettyDate(eventDay(originalEvent), { month: 'short', day: 'numeric' })}</small>}
+            {change.event && <small className="ai-event-preview">{previewLabel}: {change.event.title} · {prettyDate(eventDay(change.event), { month: 'short', day: 'numeric' })}{change.event.location ? ` · ${change.event.location}` : ''}</small>}
+          </span>
+        </label>
+      })}</div>
+      <div className="ai-selection-actions"><button className="text-link" onClick={() => setAllChangesSelected(true)}>Select all</button><button className="text-link" onClick={() => setAllChangesSelected(false)}>Clear selection</button><span>{selectedChangeIds.length} selected</span></div>
+      <p className="ai-notice">{proposalResult.notice} Applying changes updates your local itinerary; your automatic sync setting still applies.</p>
+      <div className="dialog-actions"><button className="secondary-button" onClick={closeToForm}>Back</button><span /><button className="primary-button" disabled={!selectedChangeIds.length} onClick={applySelectedChanges}>Apply selected</button></div></> : <>
+        <p className="ai-no-changes">No changes recommended. Your existing plan looks good based on the details provided.</p>
+        <p className="ai-notice">{proposalResult.notice}</p>
+        <div className="dialog-actions"><button className="secondary-button" onClick={closeToForm}>Adjust request</button><span /><button className="primary-button" onClick={onClose}>Done</button></div>
+      </>}
+    </div>}
+  </DialogFrame>
 }
 
 function EventDialog({ initial, trips, defaultTripId, onClose, onSave, onDelete, onEditPlan }: { initial: PlanEvent | null; trips: Trip[]; defaultTripId?: string; onClose: () => void; onSave: (event: PlanEvent) => void; onDelete: (id: string) => void; onEditPlan: (tripId: string) => void }) {
@@ -727,19 +980,21 @@ function TripEditorPage({ trip, onCancel, onSave, onDelete }: { trip: Trip; onCa
   </section>
 }
 
-function TripDialog({ initial, onClose, onSave, onDelete }: { initial: Trip | null; onClose: () => void; onSave: (trip: Trip) => void; onDelete: (id: string) => void }) {
+function TripDialog({ initial, prefill, onClose, onSave, onDelete }: { initial: Trip | null; prefill?: TripPrefill; onClose: () => void; onSave: (trip: Trip) => void; onDelete: (id: string) => void }) {
   return <DialogFrame title={initial ? 'Edit your trip' : 'Somewhere new?'} subtitle={initial ? 'Every good journey has room to change.' : 'Start with the where. The when can follow.'} onClose={onClose}>
-    <TripForm initial={initial} onCancel={onClose} onSave={onSave} onDelete={onDelete} />
+    <TripForm initial={initial} prefill={prefill} onCancel={onClose} onSave={onSave} onDelete={onDelete} />
   </DialogFrame>
 }
 
-function TripForm({ initial, onCancel, onSave, onDelete }: { initial: Trip | null; onCancel: () => void; onSave: (trip: Trip) => void; onDelete: (id: string) => void }) {
-  const [name, setName] = useState(initial?.name ?? '')
-  const [destination, setDestination] = useState(initial?.destination ?? '')
-  const [startDate, setStartDate] = useState(initial?.startDate ?? dateOnly(shiftDate(today, 7)))
-  const [endDate, setEndDate] = useState(initial?.endDate ?? dateOnly(shiftDate(today, 10)))
+function TripForm({ initial, prefill, onCancel, onSave, onDelete }: { initial: Trip | null; prefill?: TripPrefill; onCancel: () => void; onSave: (trip: Trip) => void; onDelete: (id: string) => void }) {
+  const defaultStart = prefill?.startDate ?? dateOnly(shiftDate(today, 7))
+  const defaultDuration = prefill?.suggestedDurationDays ?? 4
+  const [name, setName] = useState(initial?.name ?? prefill?.name ?? '')
+  const [destination, setDestination] = useState(initial?.destination ?? prefill?.destination ?? '')
+  const [startDate, setStartDate] = useState(initial?.startDate ?? defaultStart)
+  const [endDate, setEndDate] = useState(initial?.endDate ?? prefill?.endDate ?? dateOnly(shiftDate(new Date(`${defaultStart}T12:00:00`), defaultDuration - 1)))
   const [color, setColor] = useState(initial?.color ?? palette[0])
-  const [note, setNote] = useState(initial?.note ?? '')
+  const [note, setNote] = useState(initial?.note ?? prefill?.note ?? '')
   const submit = (event: FormEvent) => { event.preventDefault(); if (!name.trim() || !destination.trim() || endDate < startDate) return; onSave({ id: initial?.id ?? newId(), name: name.trim(), destination: destination.trim(), startDate, endDate, color, image: initial?.image ?? covers[Math.floor(Math.random() * covers.length)], note: note.trim() }) }
   return <form className="dialog-form" onSubmit={submit}><label>Give this trip a name<input required autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="A week somewhere wonderful" /></label><label>Where are you headed?<input required value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="City, country" /></label><div className="form-two"><label>Leaving<input required type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>Coming back<input required type="date" min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div><div className="color-field"><span>A color for this trip</span><div className="color-options">{palette.map((option) => <button type="button" key={option} className={`color-option ${color === option ? 'chosen' : ''}`} style={{ background: option }} onClick={() => setColor(option)} aria-label={`Choose ${option}`} />)}</div></div><label>A thought to take with you <span className="optional">(optional)</span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="What are you looking forward to?" /></label><div className="dialog-actions">{initial && <button type="button" className="text-danger" onClick={() => onDelete(initial.id)}>Delete trip</button>}<span /><button type="button" className="secondary-button" onClick={onCancel}>Cancel</button><button className="primary-button" type="submit">{initial ? 'Save trip' : 'Create trip'}</button></div></form>
 }
