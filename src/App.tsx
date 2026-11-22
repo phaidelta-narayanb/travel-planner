@@ -310,6 +310,19 @@ function App() {
   const saveEvent = (event: PlanEvent) => setData((current) => ({ ...current, events: [...current.events.filter((item) => item.id !== event.id), event].sort((a, b) => a.start.localeCompare(b.start)) }))
   const deleteEvent = (id: string) => { setData((current) => ({ ...current, events: current.events.filter((event) => event.id !== id) })); setEventModal(null) }
   const saveTrip = (trip: Trip) => setData((current) => ({ ...current, trips: [...current.trips.filter((item) => item.id !== trip.id), trip].sort((a, b) => a.startDate.localeCompare(b.startDate)) }))
+  const saveTripFromDialog = (trip: Trip) => {
+    const isNewTrip = tripModal === 'new'
+    saveTrip(trip)
+    setTripModal(null)
+    setTripPrefill(undefined)
+    if (isNewTrip) {
+      setFilter([trip.id])
+      navigate(`/trips/${encodeURIComponent(trip.id)}/itinerary`, { replace: true })
+      setNotice('Trip created. Add your first plan.')
+    } else {
+      setNotice('Trip saved.')
+    }
+  }
   const openNewTrip = () => { setTripPrefill(undefined); setTripModal('new') }
   const openAIPlanner = (planner: AIPlannerMode) => {
     if (!account) {
@@ -490,14 +503,14 @@ function App() {
           {view === 'timeline' && <TimelineView events={visibleEvents} trips={data.trips} focusRequest={timelineFocus} onFocusHandled={clearTimelineFocus} onNew={() => setEventModal('new')} onEdit={setEventModal} />}
           {view === 'trips' && <TripsView trips={data.trips} events={data.events} onNew={openNewTrip} onDiscover={() => openAIPlanner({ mode: 'destinations' })} onEdit={(trip) => navigate(`/trips/${encodeURIComponent(trip.id)}/edit`)} onNewEvent={() => setEventModal('new')} onOpenPlan={(tripId) => openTripPlan(tripId)} />}
           {view === 'plan' && activeTrip && <TripPlanPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate('/trips', { replace: true })} onEditTrip={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}/edit`)} onEditItinerary={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}/itinerary`)} onAddEvent={() => setEventModal('new')} onEditEvent={setEventModal} onPlanWithAI={() => openAIPlanner({ mode: 'itinerary', tripId: activeTrip.id })} />}
-          {view === 'itinerary' && activeTrip && <ItineraryEditorPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}`, { replace: true })} onAddEvent={() => setEventModal('new')} onEditEvent={setEventModal} onDeleteEvent={deleteEvent} onMoveEvent={saveEvent} />}
+          {view === 'itinerary' && activeTrip && <ItineraryEditorPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}`, { replace: true })} onAddEvent={() => setEventModal('new')} onPlanWithAI={() => openAIPlanner({ mode: 'itinerary', tripId: activeTrip.id })} onEditEvent={setEventModal} onDeleteEvent={deleteEvent} onMoveEvent={saveEvent} />}
           {view === 'trip-edit' && activeTrip && <TripEditorPage trip={activeTrip} onCancel={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}`, { replace: true })} onSave={(trip) => { saveTrip(trip); setNotice('Trip saved.'); navigate(`/trips/${encodeURIComponent(trip.id)}`, { replace: true }) }} onDelete={deleteTrip} />}
           {(view === 'not-found' || (activeTripId && !activeTrip)) && <section className="not-found-page"><div className="eyebrow"><span className="eyebrow-line" />NOT HERE</div><h1>We couldn't find that page<span>.</span></h1><p>This trip may have been removed, or the address may be out of date.</p><Link className="primary-button" to="/trips">Back to all trips</Link></section>}
           {(view === 'calendar' || view === 'timeline') && <footer className="page-footer"><span><span className="footer-dot" />{activeTrips} upcoming {activeTrips === 1 ? 'trip' : 'trips'}</span><span>{visibleEvents.length} plans across {filteredTrips.length} {filteredTrips.length === 1 ? 'trip' : 'trips'}</span><button className="auto-sync-toggle" onClick={() => setAutoSync(!autoSync)}><span className={`toggle ${autoSync ? 'on' : ''}`}><i /></span>Auto-sync {autoSync ? 'on' : 'off'}</button></footer>}
         </div>
       </main>
       {eventModal && <EventDialog initial={eventModal === 'new' ? null : eventModal} trips={data.trips} defaultTripId={activeTripId ?? undefined} onClose={() => setEventModal(null)} onSave={(event) => { saveEvent(event); setEventModal(null); setNotice('Plan saved on this device.') }} onDelete={deleteEvent} onEditPlan={(tripId) => openTripPlan(tripId)} />}
-      {tripModal && <TripDialog initial={tripModal === 'new' ? null : tripModal} prefill={tripPrefill} onClose={() => { setTripModal(null); setTripPrefill(undefined) }} onSave={(trip) => { saveTrip(trip); setTripModal(null); setTripPrefill(undefined); setNotice('Trip saved.') }} onDelete={deleteTrip} />}
+      {tripModal && <TripDialog initial={tripModal === 'new' ? null : tripModal} prefill={tripPrefill} onClose={() => { setTripModal(null); setTripPrefill(undefined) }} onSave={saveTripFromDialog} onDelete={deleteTrip} />}
       {aiModal && account && <AIPlannerDialog mode={aiModal.mode} account={account} trip={aiModal.mode === 'itinerary' ? data.trips.find((trip) => trip.id === aiModal.tripId) ?? null : null} events={aiModal.mode === 'itinerary' ? data.events.filter((event) => event.tripId === aiModal.tripId) : []} onClose={() => setAiModal(null)} onUseDestination={useDestination} onApplyChanges={applyAIChanges} onAuthExpired={handleAIAuthExpired} />}
       {accountOpen && <AccountDialog account={account} onClose={() => setAccountOpen(false)} onAuth={doAuth} onRequestLogout={requestLogout} onSync={() => void syncData()} lastSync={lastSync} autoSync={autoSync} setAutoSync={setAutoSync} />}
       {examplePromptOpen && <DialogFrame title="A few plans to get you going?" subtitle="Would you like to explore EzMyGo with a few example trips? You can edit or delete them anytime." onClose={() => setExamplePromptOpen(false)} className="account-dialog"><div className="dialog-actions"><button className="secondary-button" onClick={() => setExamplePromptOpen(false)}>Maybe later</button><span /><button className="primary-button" onClick={addExamplePlans}>Add example trips</button></div></DialogFrame>}
@@ -697,11 +710,12 @@ function TripPlanPage({ trip, events, onBack, onEditTrip, onEditItinerary, onAdd
   </section>
 }
 
-function ItineraryEditorPage({ trip, events, onBack, onAddEvent, onEditEvent, onDeleteEvent, onMoveEvent }: {
+function ItineraryEditorPage({ trip, events, onBack, onAddEvent, onPlanWithAI, onEditEvent, onDeleteEvent, onMoveEvent }: {
   trip: Trip
   events: PlanEvent[]
   onBack: () => void
   onAddEvent: () => void
+  onPlanWithAI: () => void
   onEditEvent: (event: PlanEvent) => void
   onDeleteEvent: (id: string) => void
   onMoveEvent: (event: PlanEvent) => void
@@ -731,7 +745,7 @@ function ItineraryEditorPage({ trip, events, onBack, onAddEvent, onEditEvent, on
 
   return <section className="itinerary-editor-page">
     <button className="back-link" onClick={onBack}><Icon name="left" size={15} />Back to {trip.name}</button>
-    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />ITINERARY EDITOR</div><h1>Make it your own<span>.</span></h1><p>Drag a plan to another day, or edit and remove it directly.</p></div><button className="primary-button" onClick={onAddEvent}><Icon name="plus" size={16} />Add a plan</button></div>
+    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />ITINERARY EDITOR</div><h1>Make it your own<span>.</span></h1><p>Drag a plan to another day, or edit and remove it directly.</p></div><div className="plan-header-actions itinerary-heading-actions"><button className="secondary-button" onClick={onPlanWithAI}><Icon name="pin" size={14} />Suggest with AI</button><button className="primary-button" onClick={onAddEvent}><Icon name="plus" size={16} />Add a plan</button></div></div>
     <div className="editor-trip-summary"><span className="trip-dot" style={{ backgroundColor: trip.color }} /><strong>{trip.name}</strong><span><Icon name="pinSmall" size={13} />{trip.destination}</span><span><Icon name="calendar" size={13} />{prettyDate(trip.startDate)} - {prettyDate(trip.endDate)}</span></div>
     <div className="itinerary-editor-days">{days.map((date) => {
       const dayEvents = sortedEvents.filter((event) => eventDay(event) === date)

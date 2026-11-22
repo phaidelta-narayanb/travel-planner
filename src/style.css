@@ -431,6 +431,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .trips-page .page-heading { flex-direction: column; }
   .trips-heading-actions { width: 100%; flex-wrap: wrap; }
   .trips-heading-actions .primary-button { margin-top: 0; }
+  .itinerary-editor-page .page-heading { flex-direction: column; }
+  .itinerary-heading-actions { width: 100%; }
+  .itinerary-heading-actions .primary-button { margin-top: 0; }
   .empty-trip-actions { flex-wrap: wrap; justify-content: center; }
   .timeline-day { grid-template-columns: 47px 16px minmax(0, 1fr); }
   .timeline-day.has-events, .timeline-day.has-schedule { min-height: 168px; }
