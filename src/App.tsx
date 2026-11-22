@@ -7,11 +7,24 @@ type View = 'calendar' | 'timeline' | 'trips' | 'plan' | 'itinerary' | 'trip-edi
 type AppRoute = { view: View; tripId?: string }
 type TimelineFocusRequest = { date: string; id: number }
 type Account = { email: string; token: string }
-const DATA_KEY = 'waypoint-planner-data'
-const ACCOUNT_KEY = 'waypoint-account'
-const SYNC_KEY = 'waypoint-sync'
-const VERSION_KEY = 'waypoint-version'
-const SYNCED_DATA_KEY = 'waypoint-synced-data'
+type PlannerSettings = {
+  examplePlansPrompted: boolean
+  autoSync: boolean
+  lastSync: string | null
+  version: number
+  syncedData: string | null
+  account: Account | null
+}
+const defaultSettings: PlannerSettings = {
+  examplePlansPrompted: false,
+  autoSync: true,
+  lastSync: null,
+  version: 0,
+  syncedData: null,
+  account: null,
+}
+const DATA_KEY = 'ezmygo-planner-data'
+const SETTINGS_KEY = 'ezmygo-settings'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const palette = ['#e99961', '#729884', '#7f8fb5', '#c17986', '#b69a54', '#9078aa']
 const covers = [
@@ -22,7 +35,8 @@ const covers = [
 const dateOnly = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 const shiftDate = (date: Date, days: number) => { const shifted = new Date(date); shifted.setDate(shifted.getDate() + days); return shifted }
 const today = new Date()
-const seedData: PlannerData = {
+const emptyData: PlannerData = { trips: [], events: [] }
+const exampleData: PlannerData = {
   trips: [
     { id: 'kyoto', name: 'Slow days in Kyoto', destination: 'Kyoto, Japan', startDate: dateOnly(shiftDate(today, 3)), endDate: dateOnly(shiftDate(today, 9)), color: palette[0], image: covers[0], note: 'A little space to wander.' },
     { id: 'italy', name: 'A summer in Italy', destination: 'Cinque Terre, Italy', startDate: dateOnly(shiftDate(today, 14)), endDate: dateOnly(shiftDate(today, 20)), color: palette[1], image: covers[1], note: 'Coastline, long lunches, no rush.' },
@@ -43,6 +57,9 @@ const seedData: PlannerData = {
 
 function readStorage<T>(key: string, fallback: T): T {
   try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback } catch { return fallback }
+}
+function readSettings(): PlannerSettings {
+  return { ...defaultSettings, ...readStorage<Partial<PlannerSettings>>(SETTINGS_KEY, {}) }
 }
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 const prettyDate = (date: string, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }) =>
@@ -101,7 +118,7 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
 }
 
 function App() {
-  const [data, setData] = useState<PlannerData>(() => readStorage(DATA_KEY, seedData))
+  const [data, setData] = useState<PlannerData>(() => readStorage(DATA_KEY, emptyData))
   const location = useLocation()
   const navigate = useNavigate()
   const route = useMemo(() => resolveRoute(location.pathname), [location.pathname])
@@ -114,22 +131,35 @@ function App() {
   const [tripModal, setTripModal] = useState<Trip | 'new' | null>(null)
   const [accountOpen, setAccountOpen] = useState(false)
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [examplePromptOpen, setExamplePromptOpen] = useState(false)
   const [remoteConflictOpen, setRemoteConflictOpen] = useState(false)
-  const [account, setAccount] = useState<Account | null>(() => readStorage(ACCOUNT_KEY, null))
-  const [autoSync, setAutoSync] = useState(() => readStorage('waypoint-auto-sync', true))
-  const [lastSync, setLastSync] = useState<string | null>(() => readStorage(SYNC_KEY, null))
-  const [version, setVersion] = useState<number>(() => readStorage(VERSION_KEY, 0))
+  const [settings, setSettings] = useState<PlannerSettings>(readSettings)
+  const { account, autoSync, lastSync, version } = settings
+  const updateSettings = useCallback((updates: Partial<PlannerSettings>) => {
+    setSettings((current) => ({ ...current, ...updates }))
+  }, [])
+  const setAccount = useCallback((nextAccount: Account | null) => {
+    updateSettings({ account: nextAccount })
+  }, [updateSettings])
+  const setAutoSync = useCallback((enabled: boolean) => {
+    updateSettings({ autoSync: enabled })
+  }, [updateSettings])
   const [syncing, setSyncing] = useState(false)
   const [notice, setNotice] = useState('')
   const [pendingRemote, setPendingRemote] = useState<{ data: PlannerData; version: number; created_at?: number } | null>(null)
-  const lastSyncedData = useRef<string | null>(localStorage.getItem(SYNCED_DATA_KEY))
+  const lastSyncedData = useRef<string | null>(settings.syncedData)
   const modalHistoryPath = useRef<string | null>(null)
-  const modalOpen = Boolean(eventModal || tripModal || accountOpen || logoutConfirmOpen || remoteConflictOpen)
+  const modalOpen = Boolean(eventModal || tripModal || accountOpen || logoutConfirmOpen || examplePromptOpen || remoteConflictOpen)
 
   useEffect(() => { localStorage.setItem(DATA_KEY, JSON.stringify(data)) }, [data])
-  useEffect(() => { localStorage.setItem('waypoint-auto-sync', JSON.stringify(autoSync)) }, [autoSync])
+  useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) }, [settings])
   useEffect(() => { if (!notice) return; const timer = window.setTimeout(() => setNotice(''), 3500); return () => window.clearTimeout(timer) }, [notice])
   useEffect(() => { if (activeTripId) setFilter(activeTripId) }, [activeTripId])
+  useEffect(() => {
+    if (view !== 'trips' || settings.examplePlansPrompted) return
+    setSettings((current) => ({ ...current, examplePlansPrompted: true }))
+    if (data.trips.length === 0) setExamplePromptOpen(true)
+  }, [data.trips.length, settings.examplePlansPrompted, view])
   useEffect(() => {
     if (modalOpen) {
       if (modalHistoryPath.current === null) {
@@ -152,6 +182,7 @@ function App() {
       setTripModal(null)
       setAccountOpen(false)
       setLogoutConfirmOpen(false)
+      setExamplePromptOpen(false)
       setRemoteConflictOpen(false)
     }
     window.addEventListener('popstate', closeModalOnBack)
@@ -176,24 +207,21 @@ function App() {
         body: JSON.stringify({ base_version: version, data }),
       })
       if (response.status === 401) {
-        setAccount(null); localStorage.removeItem(ACCOUNT_KEY)
+        setAccount(null)
         throw new Error('Your session expired. Sign in again to sync.')
       }
       if (response.status === 409) throw new Error("A newer version exists on the server. Review your account's latest snapshot before syncing.")
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || 'Could not sync your plans.')
       const result = await response.json() as { version: number; created_at: string }
-      setVersion(result.version)
-      localStorage.setItem(VERSION_KEY, JSON.stringify(result.version))
       const syncedData = JSON.stringify(data)
       lastSyncedData.current = syncedData
-      localStorage.setItem(SYNCED_DATA_KEY, syncedData)
       const syncedAt = result.created_at || new Date().toISOString()
-      setLastSync(syncedAt); localStorage.setItem(SYNC_KEY, JSON.stringify(syncedAt))
+      updateSettings({ version: result.version, syncedData, lastSync: syncedAt })
       if (!quiet) setNotice('Everything is up to date.')
     } catch (error) {
       if (!quiet) setNotice(error instanceof Error ? error.message : 'Sync failed. Please try again.')
     } finally { setSyncing(false) }
-  }, [account, data, pendingRemote, version])
+  }, [account, data, pendingRemote, setAccount, updateSettings, version])
 
   useEffect(() => {
     if (!autoSync || !account || pendingRemote || lastSyncedData.current === JSON.stringify(data)) return
@@ -263,7 +291,7 @@ function App() {
       throw new Error(typeof detail === 'string' ? detail : detail?.message || 'Could not connect your account.')
     }
     const nextAccount = { email: body.email as string, token: body.access_token as string }
-    setAccount(nextAccount); localStorage.setItem(ACCOUNT_KEY, JSON.stringify(nextAccount))
+    setAccount(nextAccount)
     const remoteVersion = body.version ?? 0
     const localHasUnsyncedChanges = lastSyncedData.current !== null && lastSyncedData.current !== JSON.stringify(data)
     if (body.snapshot && remoteVersion > version && localHasUnsyncedChanges) {
@@ -274,19 +302,17 @@ function App() {
     } else if (body.snapshot && (!lastSync || remoteVersion > version)) {
       const snapshot = body.snapshot as PlannerData
       setData(snapshot)
-      setVersion(remoteVersion)
-      localStorage.setItem(VERSION_KEY, JSON.stringify(remoteVersion))
       const syncedData = JSON.stringify(snapshot)
       lastSyncedData.current = syncedData
-      localStorage.setItem(SYNCED_DATA_KEY, syncedData)
+      const settingsUpdate: Partial<PlannerSettings> = { version: remoteVersion, syncedData }
       if (body.created_at) {
         const syncedAt = new Date(body.created_at * 1000).toISOString()
-        setLastSync(syncedAt); localStorage.setItem(SYNC_KEY, JSON.stringify(syncedAt))
+        settingsUpdate.lastSync = syncedAt
       }
+      updateSettings(settingsUpdate)
       setAccountOpen(false); setNotice('Your latest synced plans are ready on this device.')
     } else {
-      setVersion(remoteVersion)
-      localStorage.setItem(VERSION_KEY, JSON.stringify(remoteVersion))
+      updateSettings({ version: remoteVersion })
       setAccountOpen(false); setNotice(`Connected as ${nextAccount.email}.`)
     }
   }
@@ -298,7 +324,7 @@ function App() {
         if (!response.ok) offline = true
       } catch { offline = true }
     }
-    setAccount(null); localStorage.removeItem(ACCOUNT_KEY)
+    setAccount(null)
     setNotice(offline ? 'Signed out on this device. The server session will expire automatically.' : 'Signed out.')
   }
   const requestLogout = () => {
@@ -309,10 +335,22 @@ function App() {
     setLogoutConfirmOpen(false)
     void logout()
   }
+  const addExamplePlans = () => {
+    const tripIds = new Map(exampleData.trips.map((trip) => [trip.id, newId()]))
+    setData((current) => ({
+      trips: [...current.trips, ...exampleData.trips.map((trip) => ({ ...trip, id: tripIds.get(trip.id) ?? newId() }))],
+      events: [...current.events, ...exampleData.events.map((event) => ({
+        ...event,
+        id: newId(),
+        tripId: tripIds.get(event.tripId) ?? event.tripId,
+      }))],
+    }))
+    setExamplePromptOpen(false)
+    setNotice('Example trips added. Make them your own!')
+  }
   const keepLocalSnapshot = () => {
     if (!pendingRemote) return
-    setVersion(pendingRemote.version)
-    localStorage.setItem(VERSION_KEY, JSON.stringify(pendingRemote.version))
+    updateSettings({ version: pendingRemote.version })
     setPendingRemote(null)
     setRemoteConflictOpen(false)
     setNotice('Your local plans are being synced as a new version.')
@@ -320,15 +358,17 @@ function App() {
   const restoreRemoteSnapshot = () => {
     if (!pendingRemote) return
     setData(pendingRemote.data)
-    setVersion(pendingRemote.version)
-    localStorage.setItem(VERSION_KEY, JSON.stringify(pendingRemote.version))
     const syncedData = JSON.stringify(pendingRemote.data)
     lastSyncedData.current = syncedData
-    localStorage.setItem(SYNCED_DATA_KEY, syncedData)
+    const settingsUpdate: Partial<PlannerSettings> = {
+      version: pendingRemote.version,
+      syncedData,
+    }
     if (pendingRemote.created_at) {
       const syncedAt = new Date(pendingRemote.created_at * 1000).toISOString()
-      setLastSync(syncedAt); localStorage.setItem(SYNC_KEY, JSON.stringify(syncedAt))
+      settingsUpdate.lastSync = syncedAt
     }
+    updateSettings(settingsUpdate)
     setPendingRemote(null)
     setRemoteConflictOpen(false)
     setNotice('Restored the latest synced plans.')
@@ -373,12 +413,13 @@ function App() {
           {view === 'itinerary' && activeTrip && <ItineraryEditorPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}`)} onAddEvent={() => setEventModal('new')} onEditEvent={setEventModal} onDeleteEvent={deleteEvent} onMoveEvent={saveEvent} />}
           {view === 'trip-edit' && activeTrip && <TripEditorPage trip={activeTrip} onCancel={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}`)} onSave={(trip) => { saveTrip(trip); setNotice('Trip saved.'); navigate(`/trips/${encodeURIComponent(trip.id)}`) }} onDelete={deleteTrip} />}
           {(view === 'not-found' || (activeTripId && !activeTrip)) && <section className="not-found-page"><div className="eyebrow"><span className="eyebrow-line" />NOT HERE</div><h1>We couldn't find that page<span>.</span></h1><p>This trip may have been removed, or the address may be out of date.</p><Link className="primary-button" to="/trips">Back to all trips</Link></section>}
-          {(view === 'calendar' || view === 'timeline') && <footer className="page-footer"><span><span className="footer-dot" />{activeTrips} upcoming {activeTrips === 1 ? 'trip' : 'trips'}</span><span>{visibleEvents.length} plans across {filteredTrips.length} {filteredTrips.length === 1 ? 'trip' : 'trips'}</span><button className="auto-sync-toggle" onClick={() => setAutoSync((value) => !value)}><span className={`toggle ${autoSync ? 'on' : ''}`}><i /></span>Auto-sync {autoSync ? 'on' : 'off'}</button></footer>}
+          {(view === 'calendar' || view === 'timeline') && <footer className="page-footer"><span><span className="footer-dot" />{activeTrips} upcoming {activeTrips === 1 ? 'trip' : 'trips'}</span><span>{visibleEvents.length} plans across {filteredTrips.length} {filteredTrips.length === 1 ? 'trip' : 'trips'}</span><button className="auto-sync-toggle" onClick={() => setAutoSync(!autoSync)}><span className={`toggle ${autoSync ? 'on' : ''}`}><i /></span>Auto-sync {autoSync ? 'on' : 'off'}</button></footer>}
         </div>
       </main>
       {eventModal && <EventDialog initial={eventModal === 'new' ? null : eventModal} trips={data.trips} defaultTripId={activeTripId ?? undefined} onClose={() => setEventModal(null)} onSave={(event) => { saveEvent(event); setEventModal(null); setNotice('Plan saved on this device.') }} onDelete={deleteEvent} onEditPlan={(tripId) => openTripPlan(tripId)} />}
       {tripModal && <TripDialog initial={tripModal === 'new' ? null : tripModal} onClose={() => setTripModal(null)} onSave={(trip) => { saveTrip(trip); setTripModal(null); setNotice('Trip saved.') }} onDelete={deleteTrip} />}
       {accountOpen && <AccountDialog account={account} onClose={() => setAccountOpen(false)} onAuth={doAuth} onRequestLogout={requestLogout} onSync={() => void syncData()} lastSync={lastSync} autoSync={autoSync} setAutoSync={setAutoSync} />}
+      {examplePromptOpen && <DialogFrame title="A few plans to get you going?" subtitle="Would you like to explore EzMyGo with a few example trips? You can edit or delete them anytime." onClose={() => setExamplePromptOpen(false)} className="account-dialog"><div className="dialog-actions"><button className="secondary-button" onClick={() => setExamplePromptOpen(false)}>Maybe later</button><span /><button className="primary-button" onClick={addExamplePlans}>Add example trips</button></div></DialogFrame>}
       {logoutConfirmOpen && <DialogFrame title="Sign out?" subtitle="Your plans will stay saved on this device. You can sign in again to sync." onClose={() => setLogoutConfirmOpen(false)} className="logout-confirm-dialog"><div className="dialog-actions"><span /><button className="secondary-button" onClick={() => setLogoutConfirmOpen(false)}>Cancel</button><button className="primary-button confirm-logout-button" onClick={confirmLogout}>Log out</button></div></DialogFrame>}
       {pendingRemote && remoteConflictOpen && <DialogFrame title="A newer backup is waiting." subtitle={`This device has local changes, and your account has reached version ${pendingRemote.version}. Choose which snapshot to keep.`} onClose={() => { setRemoteConflictOpen(false); setNotice('Sync paused. Choose Sync now when you are ready to review the backup.') }} className="account-dialog"><div className="dialog-form"><button className="primary-button auth-submit" onClick={restoreRemoteSnapshot}>Restore the latest backup</button><button className="secondary-button auth-submit" onClick={keepLocalSnapshot}>Keep this device's plans</button><button className="secondary-button auth-submit" onClick={() => { setRemoteConflictOpen(false); setNotice('Sync paused. Choose Sync now when you are ready to review the backup.') }}>Decide later</button><p className="offline-note">Your choice creates a new version. Previous server snapshots remain in history.</p></div></DialogFrame>}
       {notice && <div className="toast" role="status">{notice}</div>}
