@@ -201,6 +201,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .empty-trips { display: grid; justify-items: center; padding: 60px 20px; border: 1px dashed #dfe3dc; border-radius: 7px; background: #fdfdfb; text-align: center; }
 .trips-heading-actions, .empty-trip-actions { display: flex; align-items: center; gap: 8px; }
 .calendar-heading-actions { display: flex; align-items: center; gap: 8px; }
+.mobile-add-button { display: none; width: 30px; min-width: 30px; height: 30px; justify-content: center; padding: 0; }
 .empty-stamp { display: grid; width: 52px; height: 52px; place-items: center; border-radius: 50%; background: #eff3ed; color: #78907c; }
 .empty-trips h2 { margin: 16px 0 5px; color: #536158; font-family: var(--serif); font-size: 17px; }
 .empty-trips p { margin: 0 0 17px; color: #9ba29c; font-size: 11px; }
@@ -432,8 +433,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .trips-page .page-heading { flex-direction: column; }
   .trips-heading-actions { width: 100%; flex-wrap: wrap; }
   .trips-heading-actions .primary-button { margin-top: 0; }
-  .calendar-heading-actions { width: 100%; flex-wrap: wrap; }
-  .calendar-heading-actions button { margin-top: 0; }
+  .calendar-page .page-heading, .timeline-page .page-heading { align-items: stretch; flex-direction: column; gap: 12px; }
+  .calendar-heading-actions { width: 100%; }
+  .calendar-ai-button { width: 100%; justify-content: center; }
+  .calendar-heading-actions .desktop-add-button { display: none; }
+  .mobile-add-button { display: flex; }
   .itinerary-editor-page .page-heading { flex-direction: column; }
   .itinerary-heading-actions { width: 100%; }
   .itinerary-heading-actions .primary-button { margin-top: 0; }
