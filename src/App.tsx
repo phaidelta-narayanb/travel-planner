@@ -805,6 +805,7 @@ function AIPlannerDialog({ mode, account, trip, events, onClose, onApplyChanges,
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showResults, setShowResults] = useState(false)
+  const [destinationStep, setDestinationStep] = useState(1)
   const loadingRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -843,6 +844,7 @@ function AIPlannerDialog({ mode, account, trip, events, onClose, onApplyChanges,
     try {
       setDestinationResult(await requestAI<DestinationSuggestionsResponse>('destinations', submittedPreferences))
       setShowResults(true)
+      setDestinationStep(2)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'AI planning could not be completed.')
     } finally {
@@ -920,6 +922,7 @@ function AIPlannerDialog({ mode, account, trip, events, onClose, onApplyChanges,
     setProposalResult(null)
     setSelectedChangeIds([])
     setShowResults(false)
+    setDestinationStep(3)
   }
 
   const askForNewTripPlan = async (event: FormEvent) => {
@@ -938,6 +941,7 @@ function AIPlannerDialog({ mode, account, trip, events, onClose, onApplyChanges,
       setProposalResult(proposal)
       setSelectedChangeIds(proposal.changes.filter((change) => change.action !== 'remove').map((change) => change.change_id))
       setShowResults(true)
+      setDestinationStep(4)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'AI planning could not be completed.')
     } finally {
@@ -968,16 +972,33 @@ function AIPlannerDialog({ mode, account, trip, events, onClose, onApplyChanges,
   }
 
   const isDestinationMode = mode === 'destinations'
-  const title = isDestinationMode ? showResults ? 'A few places to dream about.' : 'Where to next?' : 'A thoughtful plan, together.'
+  const destinationStepTitles = ['Your preferences', 'Choose a destination', 'Trip details', 'Review your plan']
+  const title = isDestinationMode
+    ? ['Where to next?', 'A few places to dream about.', 'Let’s make a trip plan.', 'Review your trip plan.'][destinationStep - 1]
+    : 'A thoughtful plan, together.'
   const subtitle = isDestinationMode
-    ? 'Tell us where you’d like to go, then add a starting point and other preferences—or let EzMyGo suggest places for the season.'
+    ? destinationStep === 1
+      ? 'Tell us where you’d like to go, then add a starting point and other preferences—or let EzMyGo suggest places for the season.'
+      : destinationStep === 2
+        ? 'Choose a destination to build its trip and itinerary.'
+        : destinationStep === 3
+          ? 'Review the trip details and planning areas before generating suggestions.'
+          : 'Select the itinerary suggestions to save with your trip.'
     : trip ? `Review ${trip.name} and suggest itinerary improvements.` : 'This trip is no longer available.'
-  const closeToForm = () => { setShowResults(false); setError('') }
+  const closeToForm = () => {
+    setShowResults(false)
+    if (isDestinationMode && !newTripDraft) setDestinationStep(1)
+    setError('')
+  }
 
   return <DialogFrame title={title} subtitle={subtitle} onClose={onClose} className="ai-planner-dialog">
+    {isDestinationMode && <div className="ai-wizard-progress" aria-label={`Step ${destinationStep} of 4: ${destinationStepTitles[destinationStep - 1]}`}>
+      <div><span>STEP {destinationStep} OF 4</span><strong>{destinationStepTitles[destinationStep - 1]}</strong></div>
+      <div className="ai-wizard-track"><i style={{ width: `${destinationStep * 25}%` }} /></div>
+    </div>}
     {error && <div className="form-error ai-error" role="alert">{error}</div>}
 
-    {isDestinationMode && !showResults && <form className="dialog-form ai-form" onSubmit={submitDestinationPreferences}>
+    {isDestinationMode && destinationStep === 1 && <form className="dialog-form ai-form" onSubmit={submitDestinationPreferences}>
       <label className="ai-destination-field">Where would you like to go? <span className="optional">(optional)</span><input className="ai-destination-input" value={preferredDestination} onChange={(event) => setPreferredDestination(event.target.value)} placeholder="A city, country, or region" /></label>
       <label>Where are you starting from? <span className="optional">(optional)</span><input value={departureRegion} onChange={(event) => setDepartureRegion(event.target.value)} placeholder="City, region, or airport" /></label>
       <div className="form-two"><label>Travel dates <span className="optional">(optional)</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>Return date<input type="date" min={startDate || undefined} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div>
@@ -989,7 +1010,7 @@ function AIPlannerDialog({ mode, account, trip, events, onClose, onApplyChanges,
       <div className="dialog-actions ai-form-actions"><button type="button" className="secondary-button" disabled={loading} onClick={() => void askForDestinations({})}>Surprise me</button><span /><button className="primary-button" disabled={loading}>Find destinations</button></div>
     </form>}
 
-    {isDestinationMode && showResults && destinationResult && !newTripDraft && <div className="ai-results">
+    {isDestinationMode && destinationStep === 2 && destinationResult && <div className="ai-results">
       <div className="ai-result-summary"><strong>{destinationResult.summary}</strong><small>Season considered from {prettyDate(destinationResult.current_date, { month: 'long', day: 'numeric', year: 'numeric' })}</small></div>
       <div className="ai-destination-list">{destinationResult.suggestions.map((suggestion, index) => <article className="ai-destination-card" key={`${suggestion.destination}-${index}`}>
         <div className="ai-card-title"><span className="ai-card-number">{String(index + 1).padStart(2, '0')}</span><div><h3>{suggestion.trip_name}</h3><span><Icon name="pinSmall" size={13} />{suggestion.destination}</span></div></div>
@@ -997,10 +1018,10 @@ function AIPlannerDialog({ mode, account, trip, events, onClose, onApplyChanges,
         <div className="ai-card-footer"><small>About {suggestion.ideal_duration_days} days</small><button className="secondary-button" onClick={() => startNewTripPlan(suggestion)}>Plan this trip</button></div>
       </article>)}</div>
       <p className="ai-notice">{destinationResult.notice}</p>
-      <div className="dialog-actions"><button className="secondary-button" onClick={closeToForm}>Adjust preferences</button><span /><button className="secondary-button" onClick={() => void askForDestinations(preferences)}>Try another set</button></div>
+      <div className="dialog-actions"><button className="secondary-button" onClick={closeToForm}>Back to preferences</button><span /><button className="secondary-button" onClick={() => void askForDestinations(preferences)}>Try another set</button></div>
     </div>}
 
-    {isDestinationMode && newTripDraft && !showResults && <form className="dialog-form ai-form" onSubmit={(event) => void askForNewTripPlan(event)}>
+    {isDestinationMode && destinationStep === 3 && newTripDraft && <form className="dialog-form ai-form" onSubmit={(event) => void askForNewTripPlan(event)}>
       <div className="ai-trip-context"><strong>{newTripDraft.trip.destination}</strong><span>Build your trip and itinerary together. Review all suggestions before saving.</span></div>
       <label>Trip name<input required value={newTripDraft.trip.name} onChange={(event) => updateNewTrip({ name: event.target.value })} /></label>
       <label>Destination<input required value={newTripDraft.trip.destination} onChange={(event) => updateNewTrip({ destination: event.target.value })} /></label>
@@ -1009,10 +1030,10 @@ function AIPlannerDialog({ mode, account, trip, events, onClose, onApplyChanges,
       <fieldset className="ai-focus-options"><legend>Suggested areas to plan</legend><div>{[['activities', 'Activities'], ['sightseeing', 'Places to see'], ['transport', 'Getting around'], ['stays', 'Places to stay'], ['food', 'Food'], ['shopping', 'Shopping']].map(([value, label]) => <label key={value} className="ai-focus-option"><input type="checkbox" checked={focusAreas.includes(value as ItineraryFocus)} onChange={() => toggleFocusArea(value)} />{label}</label>)}</div></fieldset>
       <label>Anything specific to include? <span className="optional">(optional)</span><textarea rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Preferences, accessibility needs, things to avoid…" /></label>
       <p className="ai-notice">EzMyGo preselected planning areas based on your destination and preferences. You can change them. Nothing is saved until you review and create the trip.</p>
-      <div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => { setNewTripDraft(null); setShowResults(true) }}>Back to ideas</button><span /><button className="primary-button" disabled={loading || focusAreas.length === 0}>Generate trip plan</button></div>
+      <div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => { setNewTripDraft(null); setShowResults(true); setDestinationStep(2) }}>Back</button><span /><button className="primary-button" disabled={loading || focusAreas.length === 0}>Generate trip plan</button></div>
     </form>}
 
-    {isDestinationMode && newTripDraft && showResults && proposalResult && <div className="ai-results">
+    {isDestinationMode && destinationStep === 4 && newTripDraft && proposalResult && <div className="ai-results">
       <div className="ai-result-summary"><strong>{proposalResult.summary}</strong><small>Proposed itinerary for {newTripDraft.trip.name}. The trip isn’t saved yet.</small></div>
       {proposalResult.changes.length ? <>
         <div className="ai-change-list">{proposalResult.changes.map((change) => <label className={`ai-change ai-change-${change.action}`} key={change.change_id}>
@@ -1024,7 +1045,7 @@ function AIPlannerDialog({ mode, account, trip, events, onClose, onApplyChanges,
         <div className="ai-selection-actions"><button className="text-link" onClick={() => setAllChangesSelected(true)}>Select all</button><button className="text-link" onClick={() => setAllChangesSelected(false)}>Clear selection</button><span>{selectedChangeIds.length} selected</span></div>
       </> : <p className="ai-no-changes">No itinerary items were suggested for these options. You can create the trip and add plans yourself.</p>}
       <p className="ai-notice">{proposalResult.notice} Create the trip to save the selected itinerary items to this device.</p>
-      <div className="dialog-actions"><button className="secondary-button" onClick={() => setShowResults(false)}>Edit trip and plan</button><span /><button className="primary-button" onClick={applySelectedChanges}>{proposalResult.changes.length ? 'Create trip & apply selected' : 'Create trip'}</button></div>
+      <div className="dialog-actions"><button className="secondary-button" onClick={() => { setShowResults(false); setDestinationStep(3) }}>Back</button><span /><button className="primary-button" onClick={applySelectedChanges}>{proposalResult.changes.length ? 'Create trip & apply selected' : 'Finish: create trip'}</button></div>
     </div>}
 
     {!isDestinationMode && !showResults && trip && <form className="dialog-form ai-form" onSubmit={(event) => void askForItinerary(event)}>
