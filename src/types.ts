@@ -41,7 +41,10 @@ export type DestinationSuggestion = {
   why_it_fits: string
   seasonal_fit: string
   ideal_duration_days: number
+  recommended_focus_areas: ItineraryFocus[]
 }
+
+export type ItineraryFocus = 'activities' | 'sightseeing' | 'transport' | 'stays' | 'food' | 'shopping'
 
 export type DestinationSuggestionsResponse = {
   summary: string
