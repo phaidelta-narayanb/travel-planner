@@ -66,6 +66,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .breadcrumbs, .top-actions { display: flex; align-items: center; }
 .breadcrumbs { gap: 9px; color: #9da39f; font-size: 11px; }
 .breadcrumbs strong { color: #4c5651; font-weight: 600; }
+.mobile-app-name { display: none; }
+.page-back-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mobile-page-breadcrumb { display: none; }
 .mobile-app-name, .mobile-title-separator { display: none; }
 .top-actions { gap: 14px; }
 .mobile-trip-filter { display: none; }
@@ -393,9 +396,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .main-content { margin-left: 0; padding-bottom: 60px; }
   .topbar { height: 55px; padding: 0 15px; }
   .breadcrumbs { gap: 6px; font-size: 10px; }
-  .breadcrumbs span:first-child, .breadcrumbs > svg, .icon-button, .top-divider { display: none; }
+  .desktop-breadcrumb, .icon-button, .top-divider { display: none; }
   .breadcrumbs .mobile-app-name { display: inline; color: #687b6d; font-weight: 700; }
-  .breadcrumbs .mobile-title-separator { display: inline; color: #c1c6c0; }
+  .page-back-row { justify-content: flex-start; gap: 12px; margin-bottom: 20px; }
+  .page-back-row .back-link { flex: 0 0 auto; margin: 0; white-space: nowrap; }
+  .mobile-page-breadcrumb { display: flex; min-width: 0; align-items: center; gap: 6px; color: #8d978f; font-size: 9px; }
+  .mobile-page-breadcrumb strong { flex: 0 0 auto; color: #536158; font-weight: 600; }
+  .mobile-page-breadcrumb > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .top-actions { gap: 9px; }
   .sync-button { height: 30px; padding: 0 9px; font-size: 10px; }
   .top-avatar { width: 28px; height: 28px; min-width: 28px; }

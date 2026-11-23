@@ -489,7 +489,7 @@ function App() {
 
       <main className="main-content">
         <header className="topbar">
-          <div className="breadcrumbs"><span>Workspace</span><Icon name="chevron" size={14} /><span className="mobile-app-name">{APP_NAME}</span><span className="mobile-title-separator">/</span><strong>{view === 'trips' ? 'My trips' : view === 'timeline' ? 'Timeline' : view === 'plan' ? 'Trip plan' : view === 'itinerary' ? 'Edit itinerary' : view === 'trip-edit' ? 'Edit trip' : view === 'not-found' ? 'Not found' : 'Calendar'}</strong>{selectedTrip && view !== 'trips' && <><Icon name="chevron" size={14} /><span>{selectedTrip.name}</span></>}</div>
+          <div className="breadcrumbs"><span className="desktop-breadcrumb">Workspace <Icon name="chevron" size={14} /> <strong>{view === 'trips' ? 'My trips' : view === 'timeline' ? 'Timeline' : view === 'plan' ? 'Trip plan' : view === 'itinerary' ? 'Edit itinerary' : view === 'trip-edit' ? 'Edit trip' : view === 'not-found' ? 'Not found' : 'Calendar'}</strong>{selectedTrip && view !== 'trips' && <> <Icon name="chevron" size={14} /> {selectedTrip.name}</>}</span><span className="mobile-app-name">{APP_NAME}</span></div>
           <div className="top-actions"><button className="icon-button" aria-label="Search plans" onClick={() => setNotice('Tip: select a trip from the left to filter your plans.')}><Icon name="search" /></button><button className="icon-button notification-button" aria-label="Notifications" onClick={() => setNotice("You're all caught up.")}><Icon name="bell" /><span /></button><div className="top-divider" /><button className={`sync-button ${syncing ? 'is-syncing' : ''}`} onClick={() => void syncData()} disabled={syncing}><Icon name="sync" size={16} />{syncing ? 'Syncing' : 'Sync now'}</button><button className="avatar top-avatar" onClick={() => setAccountOpen(true)} aria-label="Account settings">{account ? account.email.slice(0, 1).toUpperCase() : 'G'}</button></div>
         </header>
 
@@ -692,7 +692,7 @@ function TripPlanPage({ trip, events, onBack, onEditTrip, onEditItinerary, onAdd
 }) {
   const sortedEvents = [...events].sort((a, b) => a.start.localeCompare(b.start))
   return <section className="trip-plan-page">
-    <button className="back-link" onClick={onBack}><Icon name="left" size={15} />All trips</button>
+    <PageBackRow onBack={onBack} backLabel="All trips" pageLabel="Trip plan" tripName={trip.name} />
     <div className="plan-title-row">
       <div><div className="eyebrow"><span className="eyebrow-line" />YOUR TRIP PLAN</div><h1>{trip.name}</h1><p><Icon name="pinSmall" size={14} />{trip.destination}</p></div>
       <div className="plan-header-actions"><button className="secondary-button" onClick={onEditTrip}>Edit trip details</button><button className="primary-button" onClick={onEditItinerary}><Icon name="calendar" size={15} />Edit itinerary</button></div>
@@ -744,7 +744,7 @@ function ItineraryEditorPage({ trip, events, onBack, onAddEvent, onPlanWithAI, o
   }
 
   return <section className="itinerary-editor-page">
-    <button className="back-link" onClick={onBack}><Icon name="left" size={15} />Back to {trip.name}</button>
+    <PageBackRow onBack={onBack} backLabel={`Back to ${trip.name}`} pageLabel="Edit itinerary" tripName={trip.name} />
     <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />ITINERARY EDITOR</div><h1>Make it your own<span>.</span></h1><p>Drag a plan to another day, or edit and remove it directly.</p></div><div className="plan-header-actions itinerary-heading-actions"><button className="secondary-button" onClick={onPlanWithAI}><Icon name="pin" size={14} />Suggest with AI</button><button className="primary-button" onClick={onAddEvent}><Icon name="plus" size={16} />Add a plan</button></div></div>
     <div className="editor-trip-summary"><span className="trip-dot" style={{ backgroundColor: trip.color }} /><strong>{trip.name}</strong><span><Icon name="pinSmall" size={13} />{trip.destination}</span><span><Icon name="calendar" size={13} />{prettyDate(trip.startDate)} - {prettyDate(trip.endDate)}</span></div>
     <p className="itinerary-drag-tip">On mobile, long-press a plan to drag it to another day.</p>
@@ -1096,10 +1096,17 @@ function EventDialog({ initial, trips, defaultTripId, onClose, onSave, onDelete,
 
 function TripEditorPage({ trip, onCancel, onSave, onDelete }: { trip: Trip; onCancel: () => void; onSave: (trip: Trip) => void; onDelete: (id: string) => void }) {
   return <section className="trip-editor-page">
-    <button className="back-link" onClick={onCancel}><Icon name="left" size={15} />Back to {trip.name}</button>
+    <PageBackRow onBack={onCancel} backLabel={`Back to ${trip.name}`} pageLabel="Edit trip" tripName={trip.name} />
     <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />TRIP DETAILS</div><h1>Edit your trip<span>.</span></h1><p>Every good journey has room to change.</p></div></div>
     <div className="trip-editor-card"><TripForm initial={trip} onCancel={onCancel} onSave={onSave} onDelete={onDelete} /></div>
   </section>
+}
+
+function PageBackRow({ onBack, backLabel, pageLabel, tripName }: { onBack: () => void; backLabel: string; pageLabel: string; tripName: string }) {
+  return <div className="page-back-row">
+    <button className="back-link" onClick={onBack}><Icon name="left" size={15} />{backLabel}</button>
+    <div className="mobile-page-breadcrumb"><strong>{pageLabel}</strong><span>/</span><span>{tripName}</span></div>
+  </div>
 }
 
 function TripDialog({ initial, onClose, onSave, onDelete }: { initial: Trip | null; onClose: () => void; onSave: (trip: Trip) => void; onDelete: (id: string) => void }) {
