@@ -245,6 +245,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .plan-view-all:hover { color: #4f725f; text-decoration: underline; }
 .itinerary-editor-page .page-heading { margin-bottom: 19px; }
 .editor-trip-summary { display: flex; align-items: center; gap: 8px; padding: 10px 12px; margin-bottom: 12px; border: 1px solid #e9e9e4; border-radius: 5px; background: #fff; color: #828c85; font-size: 9px; }
+.itinerary-drag-tip { display: none; }
 .editor-trip-summary strong { color: #526057; font-size: 10px; font-weight: 600; }
 .editor-trip-summary > span:not(.trip-dot) { display: flex; align-items: center; gap: 4px; margin-left: 7px; }
 .editor-trip-summary > span:last-child { margin-left: auto; }
@@ -449,6 +450,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .itinerary-editor-page .page-heading { flex-direction: column; }
   .itinerary-heading-actions { width: 100%; }
   .itinerary-heading-actions .primary-button { margin-top: 0; }
+  .itinerary-drag-tip { display: block; padding: 9px 11px; margin: -7px 0 12px; border: 1px solid #e5ebe2; border-radius: 5px; background: #f8faf6; color: #718074; font-size: 10px; line-height: 1.4; }
   .empty-trip-actions { flex-wrap: wrap; justify-content: center; }
   .timeline-day { grid-template-columns: 47px 16px minmax(0, 1fr); }
   .timeline-day.has-events, .timeline-day.has-schedule { min-height: 168px; }

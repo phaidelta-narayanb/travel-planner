@@ -747,6 +747,7 @@ function ItineraryEditorPage({ trip, events, onBack, onAddEvent, onPlanWithAI, o
     <button className="back-link" onClick={onBack}><Icon name="left" size={15} />Back to {trip.name}</button>
     <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />ITINERARY EDITOR</div><h1>Make it your own<span>.</span></h1><p>Drag a plan to another day, or edit and remove it directly.</p></div><div className="plan-header-actions itinerary-heading-actions"><button className="secondary-button" onClick={onPlanWithAI}><Icon name="pin" size={14} />Suggest with AI</button><button className="primary-button" onClick={onAddEvent}><Icon name="plus" size={16} />Add a plan</button></div></div>
     <div className="editor-trip-summary"><span className="trip-dot" style={{ backgroundColor: trip.color }} /><strong>{trip.name}</strong><span><Icon name="pinSmall" size={13} />{trip.destination}</span><span><Icon name="calendar" size={13} />{prettyDate(trip.startDate)} - {prettyDate(trip.endDate)}</span></div>
+    <p className="itinerary-drag-tip">On mobile, long-press a plan to drag it to another day.</p>
     <div className="itinerary-editor-days">{days.map((date) => {
       const dayEvents = sortedEvents.filter((event) => eventDay(event) === date)
       return <div key={date} className={`editor-day ${dragOverDate === date ? 'drop-active' : ''}`} onDragOver={(event) => { event.preventDefault(); setDragOverDate(date) }} onDragLeave={() => setDragOverDate(null)} onDrop={(event) => handleDrop(event, date)}>
