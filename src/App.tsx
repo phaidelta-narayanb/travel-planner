@@ -494,9 +494,8 @@ function App() {
         </header>
 
         <div className="page-content">
-          {(view === 'calendar' || view === 'timeline') && <MobileTripFilter trips={data.trips} selectedTripIds={filter} onSelectAll={() => selectTripFilter('all')} onToggleTrip={toggleTripFilter} />}
-          {view === 'calendar' && <CalendarView month={month} setMonth={setMonth} events={visibleEvents} trips={data.trips} onNew={() => setEventModal('new')} onPlanWithAI={() => openAIPlanner({ mode: 'destinations' })} onEdit={setEventModal} />}
-          {view === 'timeline' && <TimelineView events={visibleEvents} trips={data.trips} focusRequest={timelineFocus} onFocusHandled={clearTimelineFocus} onNew={() => setEventModal('new')} onPlanWithAI={() => openAIPlanner({ mode: 'destinations' })} onEdit={setEventModal} />}
+          {view === 'calendar' && <CalendarView month={month} setMonth={setMonth} events={visibleEvents} trips={data.trips} tripFilter={<MobileTripFilter trips={data.trips} selectedTripIds={filter} onSelectAll={() => selectTripFilter('all')} onToggleTrip={toggleTripFilter} />} onNew={() => setEventModal('new')} onPlanWithAI={() => openAIPlanner({ mode: 'destinations' })} onEdit={setEventModal} />}
+          {view === 'timeline' && <TimelineView events={visibleEvents} trips={data.trips} tripFilter={<MobileTripFilter trips={data.trips} selectedTripIds={filter} onSelectAll={() => selectTripFilter('all')} onToggleTrip={toggleTripFilter} />} focusRequest={timelineFocus} onFocusHandled={clearTimelineFocus} onNew={() => setEventModal('new')} onPlanWithAI={() => openAIPlanner({ mode: 'destinations' })} onEdit={setEventModal} />}
           {view === 'trips' && <TripsView trips={data.trips} events={data.events} onNew={openNewTrip} onDiscover={() => openAIPlanner({ mode: 'destinations' })} onEdit={(trip) => navigate(`/trips/${encodeURIComponent(trip.id)}/edit`)} onNewEvent={() => setEventModal('new')} onOpenPlan={(tripId) => openTripPlan(tripId)} />}
           {view === 'plan' && activeTrip && <TripPlanPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate('/trips', { replace: true })} onEditTrip={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}/edit`)} onEditItinerary={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}/itinerary`)} onAddEvent={() => setEventModal('new')} onEditEvent={setEventModal} onPlanWithAI={() => openAIPlanner({ mode: 'itinerary', tripId: activeTrip.id })} />}
           {view === 'itinerary' && activeTrip && <ItineraryEditorPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}`, { replace: true })} onAddEvent={() => setEventModal('new')} onPlanWithAI={() => openAIPlanner({ mode: 'itinerary', tripId: activeTrip.id })} onEditEvent={setEventModal} onDeleteEvent={deleteEvent} onMoveEvent={saveEvent} />}
@@ -523,6 +522,7 @@ function MobileTripFilter({ trips, selectedTripIds, onSelectAll, onToggleTrip }:
   onSelectAll: () => void
   onToggleTrip: (tripId: string) => void
 }) {
+  const [isOpen, setIsOpen] = useState(false)
   const label = selectedTripIds === null
     ? 'All trips'
     : selectedTripIds.length === 0
@@ -532,7 +532,11 @@ function MobileTripFilter({ trips, selectedTripIds, onSelectAll, onToggleTrip }:
         : `${selectedTripIds.length} trips`
 
   return <details className="mobile-trip-filter">
-    <summary><Icon name="grid" size={15} /><span>Filter trips</span><strong>{label}</strong><Icon name="chevron" size={14} /></summary>
+    <summary onClick={() => setIsOpen((open) => !open)}><Icon name="grid" size={15} /><span>Filter trips</span><strong>{label}</strong><Icon name="chevron" size={14} /></summary>
+    {isOpen && <button className="mobile-trip-filter-backdrop" aria-label="Close trip filter" tabIndex={-1} onClick={(event) => {
+      event.currentTarget.closest('details')?.removeAttribute('open')
+      setIsOpen(false)
+    }} />}
     <div className="mobile-trip-filter-menu" role="group" aria-label="Filter by trip">
       <label className="mobile-trip-filter-option"><input type="checkbox" checked={selectedTripIds === null} onChange={onSelectAll} /><span>All trips</span></label>
       {trips.map((trip) => <label className="mobile-trip-filter-option" key={trip.id}>
@@ -544,14 +548,14 @@ function MobileTripFilter({ trips, selectedTripIds, onSelectAll, onToggleTrip }:
   </details>
 }
 
-function CalendarView({ month, setMonth, events, trips, onNew, onPlanWithAI, onEdit }: { month: Date; setMonth: (date: Date) => void; events: PlanEvent[]; trips: Trip[]; onNew: () => void; onPlanWithAI: () => void; onEdit: (event: PlanEvent) => void }) {
+function CalendarView({ month, setMonth, events, trips, tripFilter, onNew, onPlanWithAI, onEdit }: { month: Date; setMonth: (date: Date) => void; events: PlanEvent[]; trips: Trip[]; tripFilter: ReactNode; onNew: () => void; onPlanWithAI: () => void; onEdit: (event: PlanEvent) => void }) {
   const offset = (new Date(month.getFullYear(), month.getMonth(), 1).getDay() + 6) % 7
   const days = Array.from({ length: 42 }, (_, index) => new Date(month.getFullYear(), month.getMonth(), index - offset + 1))
   const todayKey = dateOnly(today)
   return <section className="calendar-page">
     <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />YOUR SPACE TO WANDER</div><h1>A life well planned<span>.</span></h1><p>All the places you're going, and everything in between.</p></div><div className="calendar-heading-actions"><button className="secondary-button calendar-ai-button" onClick={onPlanWithAI}><Icon name="pin" size={15} />Plan with AI</button><button className="primary-button desktop-add-button" onClick={onNew}><Icon name="plus" size={17} />Add to itinerary</button></div></div>
     <div className="month-toolbar"><div className="month-title"><h2>{monthTitle(month)}</h2><span className="month-subtitle">A little look at what's ahead</span></div><div className="month-controls"><button className="today-button" onClick={() => setMonth(new Date(today.getFullYear(), today.getMonth(), 1))}>Today</button><button className="arrow-button" aria-label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><Icon name="left" size={17} /></button><button className="arrow-button" aria-label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><Icon name="right" size={17} /></button><div className="view-switch"><span className="view-current"><Icon name="calendar" size={15} />Month</span><span className="view-switch-divider" /><Link className="view-option" to="/timeline"><Icon name="clock" size={15} />Timeline</Link></div><button className="primary-button mobile-add-button" aria-label="Add to itinerary" title="Add to itinerary" onClick={onNew}><Icon name="plus" size={17} /></button></div></div>
-    <div className="calendar-card"><div className="weekdays">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <div key={day}>{day}</div>)}</div><div className="calendar-grid">{days.map((day) => {
+    {tripFilter}<div className="calendar-card"><div className="weekdays">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <div key={day}>{day}</div>)}</div><div className="calendar-grid">{days.map((day) => {
       const date = dateOnly(day)
       const dayEvents = events.filter((event) => date >= eventDay(event) && date <= (event.end?.slice(0, 10) ?? eventDay(event))).sort((a, b) => a.start.localeCompare(b.start))
       return <div key={date} className={`calendar-day ${day.getMonth() !== month.getMonth() ? 'outside-month' : ''} ${date === todayKey ? 'is-today' : ''}`}><span className={`day-number ${date === todayKey ? 'today-number' : ''}`}>{day.getDate()}</span><div className="day-events">{dayEvents.slice(0, 3).map((event) => {
@@ -565,7 +569,7 @@ function CalendarView({ month, setMonth, events, trips, onNew, onPlanWithAI, onE
   </section>
 }
 
-function TimelineView({ events, trips, focusRequest, onFocusHandled, onNew, onPlanWithAI, onEdit }: { events: PlanEvent[]; trips: Trip[]; focusRequest: TimelineFocusRequest | null; onFocusHandled: (id: number) => void; onNew: () => void; onPlanWithAI: () => void; onEdit: (event: PlanEvent) => void }) {
+function TimelineView({ events, trips, tripFilter, focusRequest, onFocusHandled, onNew, onPlanWithAI, onEdit }: { events: PlanEvent[]; trips: Trip[]; tripFilter: ReactNode; focusRequest: TimelineFocusRequest | null; onFocusHandled: (id: number) => void; onNew: () => void; onPlanWithAI: () => void; onEdit: (event: PlanEvent) => void }) {
   const [currentTime, setCurrentTime] = useState(() => new Date())
   const todayStart = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate())
   const [rangeStart, setRangeStart] = useState(() => shiftDate(focusRequest ? new Date(`${focusRequest.date}T12:00:00`) : todayStart, -30))
@@ -640,7 +644,7 @@ function TimelineView({ events, trips, focusRequest, onFocusHandled, onNew, onPl
   return <section className="timeline-page">
     <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" />THE DAYS AHEAD</div><h1>Your journey, <span>unfolding.</span></h1><p>A little room for everything that's been and everything ahead.</p></div><div className="calendar-heading-actions"><button className="secondary-button calendar-ai-button" onClick={onPlanWithAI}><Icon name="pin" size={15} />Plan with AI</button><button className="primary-button desktop-add-button" onClick={onNew}><Icon name="plus" size={17} />Add to itinerary</button></div></div>
     <div className="timeline-toolbar"><div className="timeline-range"><span className="range-dot" />{prettyDate(range[0], { month: 'long', day: 'numeric' })} - {prettyDate(range[range.length - 1], { month: 'long', day: 'numeric', year: 'numeric' })}</div><div className="timeline-toolbar-actions"><span className="timeline-caption">Your plans, at a glance</span><button className="today-button go-today-button" onClick={goToToday}><Icon name="calendar" size={14} />Go to Today</button><button className="primary-button mobile-add-button" aria-label="Add to itinerary" title="Add to itinerary" onClick={onNew}><Icon name="plus" size={17} /></button></div></div>
-    <div className="timeline-list" ref={listRef} onScroll={handleScroll}>{range.map((date) => {
+    {tripFilter}<div className="timeline-list" ref={listRef} onScroll={handleScroll}>{range.map((date) => {
       const dayEvents = orderedEvents.filter((event) => date >= eventDay(event) && date <= (event.end?.slice(0, 10) ?? eventDay(event)))
       const isToday = date === todayKey
       const isPast = date < todayKey
