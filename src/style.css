@@ -200,6 +200,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .add-moment-banner > svg { margin-left: auto; color: #9da49d; }
 .empty-trips { display: grid; justify-items: center; padding: 60px 20px; border: 1px dashed #dfe3dc; border-radius: 7px; background: #fdfdfb; text-align: center; }
 .trips-heading-actions, .empty-trip-actions { display: flex; align-items: center; gap: 8px; }
+.calendar-heading-actions { display: flex; align-items: center; gap: 8px; }
 .empty-stamp { display: grid; width: 52px; height: 52px; place-items: center; border-radius: 50%; background: #eff3ed; color: #78907c; }
 .empty-trips h2 { margin: 16px 0 5px; color: #536158; font-family: var(--serif); font-size: 17px; }
 .empty-trips p { margin: 0 0 17px; color: #9ba29c; font-size: 11px; }
@@ -431,6 +432,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .trips-page .page-heading { flex-direction: column; }
   .trips-heading-actions { width: 100%; flex-wrap: wrap; }
   .trips-heading-actions .primary-button { margin-top: 0; }
+  .calendar-heading-actions { width: 100%; flex-wrap: wrap; }
+  .calendar-heading-actions button { margin-top: 0; }
   .itinerary-editor-page .page-heading { flex-direction: column; }
   .itinerary-heading-actions { width: 100%; }
   .itinerary-heading-actions .primary-button { margin-top: 0; }
