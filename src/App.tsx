@@ -142,6 +142,7 @@ function App() {
   const { view, tripId: activeTripId } = route
   const [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
   const [filter, setFilter] = useState<string[] | null>(null)
+  const [showAllSidebarTrips, setShowAllSidebarTrips] = useState(false)
   const [timelineFocus, setTimelineFocus] = useState<TimelineFocusRequest | null>(null)
   const timelineFocusId = useRef(0)
   const [eventModal, setEventModal] = useState<PlanEvent | 'new' | null>(null)
@@ -254,6 +255,7 @@ function App() {
 
   const visibleEvents = useMemo(() => data.events.filter((event) => filter === null || filter.includes(event.tripId)), [data.events, filter])
   const filteredTrips = useMemo(() => filter === null ? data.trips : data.trips.filter((trip) => filter.includes(trip.id)), [data.trips, filter])
+  const sortedTrips = useMemo(() => [...data.trips].sort((a, b) => a.startDate.localeCompare(b.startDate)), [data.trips])
   const activeTrips = data.trips.filter((trip) => trip.endDate >= dateOnly(today)).length
   const activeTrip = data.trips.find((trip) => trip.id === activeTripId)
   const selectedTrip = data.trips.find((trip) => trip.id === (activeTripId ?? (filter?.length === 1 ? filter[0] : undefined)))
@@ -473,14 +475,14 @@ function App() {
           <Link className={view === 'trips' || view === 'plan' || view === 'itinerary' || view === 'trip-edit' ? 'nav-item active' : 'nav-item'} to="/trips"><Icon name="grid" />My trips<span className="nav-count">{data.trips.length}</span></Link>
         </nav>
         {view !== 'trips' && <>
-          <div className="trip-list-head"><span className="side-label">Your trips</span><button aria-label="Create trip" className="tiny-add" onClick={openNewTrip}><Icon name="plus" size={16} /></button></div>
+          <div className="trip-list-head"><div className="trip-list-title"><span className="side-label">Your trips</span>{sortedTrips.length > 5 && <button className="trip-list-expand" aria-label={showAllSidebarTrips ? 'Show fewer trips' : 'Show all trips'} aria-expanded={showAllSidebarTrips} onClick={() => setShowAllSidebarTrips((expanded) => !expanded)}><Icon name="chevron" size={14} /></button>}</div><button aria-label="Create trip" className="tiny-add" onClick={openNewTrip}><Icon name="plus" size={16} /></button></div>
           <div className="side-trips">
             <button className={`side-trip ${filter === null ? 'selected' : ''}`} onClick={() => selectTripFilter('all')}><span className="trip-dot all-dot" /><span>All trips</span><span className="side-trip-count">{data.trips.length}</span></button>
-            {data.trips.map((trip) => <button key={trip.id} className={`side-trip ${filter?.includes(trip.id) ? 'selected' : ''}`} onClick={() => selectTripFilter(trip.id)}><span className="trip-dot" style={{ backgroundColor: trip.color }} /><span className="side-trip-name">{trip.name}</span></button>)}
+            {sortedTrips.slice(0, showAllSidebarTrips ? undefined : 5).map((trip) => <button key={trip.id} className={`side-trip ${filter?.includes(trip.id) ? 'selected' : ''}`} onClick={() => selectTripFilter(trip.id)}><span className="trip-dot" style={{ backgroundColor: trip.color }} /><span className="side-trip-name">{trip.name}</span></button>)}
           </div>
         </>}
         <div className="sidebar-bottom">
-          <div className="sync-card"><span className="sync-orb"><Icon name="sync" size={15} /></span><div><strong>{account ? 'Sync is ready' : 'Your plans, anywhere'}</strong><small>{lastSync ? `Synced ${new Date(lastSync).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'Saved on this device'}</small></div></div>
+          {/* <div className="sync-card"><span className="sync-orb"><Icon name="sync" size={15} /></span><div><strong>{account ? 'Sync is ready' : 'Your plans, anywhere'}</strong><small>{lastSync ? `Synced ${new Date(lastSync).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'Saved on this device'}</small></div></div> */}
           {account
             ? <div className="profile-button"><span className="avatar">{account.email.slice(0, 1).toUpperCase()}</span><span className="profile-text"><strong>{account.email.split('@')[0]}</strong><small>Connected account</small></span><button className="sidebar-logout" onClick={requestLogout} aria-label="Log out" title="Log out"><Icon name="logout" size={18} /></button></div>
             : <button className="profile-button" onClick={() => setAccountOpen(true)}><span className="avatar">G</span><span className="profile-text"><strong>Guest</strong><small>Guest mode</small></span><Icon name="more" size={18} /></button>}
@@ -494,8 +496,8 @@ function App() {
         </header>
 
         <div className="page-content">
-          {view === 'calendar' && <CalendarView month={month} setMonth={setMonth} events={visibleEvents} trips={data.trips} tripFilter={<MobileTripFilter trips={data.trips} selectedTripIds={filter} onSelectAll={() => selectTripFilter('all')} onToggleTrip={toggleTripFilter} />} onNew={() => setEventModal('new')} onPlanWithAI={() => openAIPlanner({ mode: 'destinations' })} onEdit={setEventModal} />}
-          {view === 'timeline' && <TimelineView events={visibleEvents} trips={data.trips} tripFilter={<MobileTripFilter trips={data.trips} selectedTripIds={filter} onSelectAll={() => selectTripFilter('all')} onToggleTrip={toggleTripFilter} />} focusRequest={timelineFocus} onFocusHandled={clearTimelineFocus} onNew={() => setEventModal('new')} onPlanWithAI={() => openAIPlanner({ mode: 'destinations' })} onEdit={setEventModal} />}
+          {view === 'calendar' && <CalendarView month={month} setMonth={setMonth} events={visibleEvents} trips={data.trips} tripFilter={<MobileTripControls trips={sortedTrips} selectedTripIds={filter} onSelectAll={() => selectTripFilter('all')} onToggleTrip={toggleTripFilter} onGoToTrip={(tripId) => { setFilter([tripId]); focusTrip(tripId) }} />} onNew={() => setEventModal('new')} onPlanWithAI={() => openAIPlanner({ mode: 'destinations' })} onEdit={setEventModal} />}
+          {view === 'timeline' && <TimelineView events={visibleEvents} trips={data.trips} tripFilter={<MobileTripControls trips={sortedTrips} selectedTripIds={filter} onSelectAll={() => selectTripFilter('all')} onToggleTrip={toggleTripFilter} onGoToTrip={(tripId) => { setFilter([tripId]); focusTrip(tripId) }} />} focusRequest={timelineFocus} onFocusHandled={clearTimelineFocus} onNew={() => setEventModal('new')} onPlanWithAI={() => openAIPlanner({ mode: 'destinations' })} onEdit={setEventModal} />}
           {view === 'trips' && <TripsView trips={data.trips} events={data.events} onNew={openNewTrip} onDiscover={() => openAIPlanner({ mode: 'destinations' })} onEdit={(trip) => navigate(`/trips/${encodeURIComponent(trip.id)}/edit`)} onNewEvent={() => setEventModal('new')} onOpenPlan={(tripId) => openTripPlan(tripId)} />}
           {view === 'plan' && activeTrip && <TripPlanPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate('/trips', { replace: true })} onEditTrip={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}/edit`)} onEditItinerary={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}/itinerary`)} onAddEvent={() => setEventModal('new')} onEditEvent={setEventModal} onPlanWithAI={() => openAIPlanner({ mode: 'itinerary', tripId: activeTrip.id })} />}
           {view === 'itinerary' && activeTrip && <ItineraryEditorPage trip={activeTrip} events={data.events.filter((event) => event.tripId === activeTrip.id)} onBack={() => navigate(`/trips/${encodeURIComponent(activeTrip.id)}`, { replace: true })} onAddEvent={() => setEventModal('new')} onPlanWithAI={() => openAIPlanner({ mode: 'itinerary', tripId: activeTrip.id })} onEditEvent={setEventModal} onDeleteEvent={deleteEvent} onMoveEvent={saveEvent} />}
@@ -544,6 +546,43 @@ function MobileTripFilter({ trips, selectedTripIds, onSelectAll, onToggleTrip }:
         <i className="trip-dot" style={{ backgroundColor: trip.color }} />
         <span>{trip.name}</span>
       </label>)}
+    </div>
+  </details>
+}
+
+function MobileTripControls({ trips, selectedTripIds, onSelectAll, onToggleTrip, onGoToTrip }: {
+  trips: Trip[]
+  selectedTripIds: string[] | null
+  onSelectAll: () => void
+  onToggleTrip: (tripId: string) => void
+  onGoToTrip: (tripId: string) => void
+}) {
+  return <div className="mobile-trip-controls">
+    <MobileTripFilter trips={trips} selectedTripIds={selectedTripIds} onSelectAll={onSelectAll} onToggleTrip={onToggleTrip} />
+    <MobileGoToTripMenu trips={trips} onGoToTrip={onGoToTrip} />
+  </div>
+}
+
+function MobileGoToTripMenu({ trips, onGoToTrip }: { trips: Trip[]; onGoToTrip: (tripId: string) => void }) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  return <details className="mobile-go-to-trip">
+    <summary onClick={() => setIsOpen((open) => !open)}><Icon name="pinSmall" size={15} /><span>Go to</span><Icon name="chevron" size={14} /></summary>
+    {isOpen && <button className="mobile-trip-filter-backdrop" aria-label="Close go to menu" tabIndex={-1} onClick={(event) => {
+      event.currentTarget.closest('details')?.removeAttribute('open')
+      setIsOpen(false)
+    }} />}
+    <div className="mobile-trip-filter-menu mobile-go-to-menu" role="menu" aria-label="Go to trip">
+      {trips.map((trip) => <button className="mobile-go-to-option" key={trip.id} role="menuitem" onClick={(event) => {
+        event.currentTarget.closest('details')?.removeAttribute('open')
+        setIsOpen(false)
+        onGoToTrip(trip.id)
+      }}>
+        <i className="trip-dot" style={{ backgroundColor: trip.color }} />
+        <span>{trip.name}</span>
+        <small>{prettyDate(trip.startDate)} – {prettyDate(trip.endDate)}</small>
+      </button>)}
+      {!trips.length && <span className="mobile-go-to-empty">No trips yet</span>}
     </div>
   </details>
 }
