@@ -15,3 +15,33 @@ The app is usable without an account and stores trips and plans in browser local
 yarn build
 yarn preview
 ```
+
+## Navigation diagram (not implemented yet)
+
+```mermaid
+flowchart LR
+    subgraph TabBar
+        Calendar <-->|Tab click| Timeline
+        Calendar <-->|Tab click| MT(My trips)
+        Timeline <-->|Tab click| MT
+        MT -->|Navigate Back| Calendar
+        Timeline -->|Navigate Back| Calendar
+    end
+
+    Start([Start]) -->|Homepage| Calendar
+    Calendar -->|Navigate Back| Close([Close app])
+
+    MT -->|Edit trip details| EYT(Edit your trip)
+    MT -->|Click on a trip| YTP(Your trip plan)
+    YTP -->|Edit itinerary| MIYO(Make it your own)
+ 
+    EYT -->|Tab click| TabBar
+    YTP -->|Tab click| TabBar
+    MIYO -->|Tab click| TabBar
+
+    Calendar <-->|Click on event| ALA[A little adjustment modal] -->|Edit plan| YTP
+
+    MIYO -->|Navigate Back| YTP
+    YTP -->|Navigate Back| MT
+    EYT -->|Navigate Back| MT
+```
