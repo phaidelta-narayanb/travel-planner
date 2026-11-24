@@ -398,9 +398,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .breadcrumbs { gap: 6px; font-size: 10px; }
   .desktop-breadcrumb, .icon-button, .top-divider { display: none; }
   .breadcrumbs .mobile-app-name { display: inline; color: #687b6d; font-weight: 700; }
-  .page-back-row { justify-content: flex-start; gap: 12px; margin-bottom: 20px; }
+  .page-back-row { justify-content: flex-start; align-items: start; gap: 12px; margin-bottom: 20px; flex-direction: column; }
   .page-back-row .back-link { flex: 0 0 auto; margin: 0; white-space: nowrap; }
-  .mobile-page-breadcrumb { display: flex; min-width: 0; align-items: center; gap: 6px; color: #8d978f; font-size: 9px; }
+  .mobile-page-breadcrumb { display: flex; min-width: 0; align-items: center; gap: 6px; color: #8d978f; font-size: 9px; background-color: #fdfdfd; padding: 4px; border-radius: 6px; }
   .mobile-page-breadcrumb strong { flex: 0 0 auto; color: #536158; font-weight: 600; }
   .mobile-page-breadcrumb > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .top-actions { gap: 9px; }
